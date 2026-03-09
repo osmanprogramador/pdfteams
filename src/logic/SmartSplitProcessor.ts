@@ -100,7 +100,8 @@ function extrairPeriodo(texto: string, rotulo: string): string {
     // Permite espaço ao redor da barra e barras de diferentes tipos
     const regex = new RegExp(rotuloEsc + '\\s*(\\d{2})\\s*[/\\-]\\s*(\\d{4})', 'i');
     const match = texto.match(regex);
-    if (match) return `${match[1]}${match[2]}`; // MM + AAAA = MMAAAA
+    if (match) return `${match[2]}${match[1]}`; // AAAA + MM = AAAAMM
+
 
     return '';
 }
