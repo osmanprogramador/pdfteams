@@ -9,9 +9,8 @@ import {
   Tooltip,
 } from '@fluentui/react-components';
 import { splitPdf, getPdfPageCount } from './logic/PdfProcessor';
+import type { SmartSplitConfig, SmartSplitResult } from './logic/SmartSplitProcessor';
 import {
-  SmartSplitConfig,
-  SmartSplitResult,
   defaultConfig,
   loadConfig,
   saveConfig,
