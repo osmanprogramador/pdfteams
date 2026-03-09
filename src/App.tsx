@@ -143,11 +143,12 @@ const App: React.FC = () => {
         {/* Sidebar */}
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <img
-              src={`${import.meta.env.BASE_URL}Logo-Branca.png`}
-              alt="Logo"
-              className="sidebar-logo-img"
-            />
+            <svg width="28" height="28" viewBox="0 0 24 24" fill="none">
+              <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" fill="#AFD9F5" opacity="0.9" />
+              <path d="M14 2v6h6" stroke="#AFD9F5" strokeWidth="1.5" fill="none" />
+              <line x1="8" y1="13" x2="16" y2="13" stroke="#1B284E" strokeWidth="1.5" />
+              <line x1="8" y1="17" x2="13" y2="17" stroke="#1B284E" strokeWidth="1.5" />
+            </svg>
           </div>
           <nav className="sidebar-nav">
             <Tooltip content="Separador de PDF" relationship="label" positioning="after">
