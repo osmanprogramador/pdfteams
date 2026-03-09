@@ -143,12 +143,11 @@ const App: React.FC = () => {
         {/* Sidebar */}
         <aside className="sidebar">
           <div className="sidebar-logo">
-            <svg width="32" height="32" viewBox="0 0 32 32" fill="none">
-              <rect width="32" height="32" rx="8" fill="#6264A7" />
-              <path d="M8 8h10a6 6 0 0 1 0 12H8V8z" fill="white" opacity="0.9" />
-              <path d="M12 14h10" stroke="#6264A7" strokeWidth="2" strokeLinecap="round" />
-              <path d="M8 22l4-4" stroke="white" strokeWidth="2" strokeLinecap="round" />
-            </svg>
+            <img
+              src={`${import.meta.env.BASE_URL}Logo-Branca.png`}
+              alt="Logo"
+              className="sidebar-logo-img"
+            />
           </div>
           <nav className="sidebar-nav">
             <Tooltip content="Separador de PDF" relationship="label" positioning="after">
@@ -169,8 +168,12 @@ const App: React.FC = () => {
           {/* Header */}
           <header className="app-header">
             <div className="header-left">
+              <img
+                src={`${import.meta.env.BASE_URL}Logo-Branca.png`}
+                alt="Logo"
+                className="header-logo"
+              />
               <h1 className="header-title">Separador de PDF</h1>
-              <span className="header-subtitle">Divida seus documentos em segundos</span>
             </div>
             {file && (
               <div className="header-right">

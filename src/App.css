@@ -10,17 +10,18 @@
 }
 
 :root {
-  --brand: #6264A7;
-  --brand-hover: #7b7dbd;
-  --brand-glow: rgba(98, 100, 167, 0.25);
-  --bg-base: #1a1a2e;
-  --bg-surface: #16213e;
+  --brand: #1B284E;
+  --brand-mid: #253668;
+  --brand-hover: #AFD9F5;
+  --brand-glow: rgba(175, 217, 245, 0.18);
+  --bg-base: #0e1628;
+  --bg-surface: #111e38;
   --bg-card: rgba(255, 255, 255, 0.04);
   --bg-card-hover: rgba(255, 255, 255, 0.07);
-  --border: rgba(255, 255, 255, 0.08);
-  --border-hover: rgba(98, 100, 167, 0.6);
-  --text-primary: #e8e8f0;
-  --text-secondary: #9a9ab0;
+  --border: rgba(175, 217, 245, 0.12);
+  --border-hover: rgba(175, 217, 245, 0.5);
+  --text-primary: #ffffff;
+  --text-secondary: #9ab8d4;
   --success: #3dd68c;
   --error: #f47c7c;
   --radius: 12px;
@@ -47,7 +48,7 @@ body {
   display: flex;
   height: 100vh;
   overflow: hidden;
-  background: linear-gradient(135deg, #1a1a2e 0%, #0d1117 100%);
+  background: linear-gradient(135deg, #0e1628 0%, #0a0f1e 100%);
 }
 
 /* ============================================================
@@ -55,8 +56,8 @@ body {
    ============================================================ */
 .sidebar {
   width: 60px;
-  background: rgba(255, 255, 255, 0.03);
-  border-right: 1px solid var(--border);
+  background: #1B284E;
+  border-right: 1px solid rgba(175, 217, 245, 0.1);
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -71,14 +72,14 @@ body {
   justify-content: center;
   width: 44px;
   height: 44px;
-  border-radius: 10px;
-  background: var(--brand);
-  box-shadow: 0 0 20px var(--brand-glow);
-  transition: box-shadow 0.3s;
+  padding: 4px;
 }
 
-.sidebar-logo:hover {
-  box-shadow: 0 0 28px rgba(98, 100, 167, 0.5);
+.sidebar-logo-img {
+  width: 44px;
+  height: auto;
+  object-fit: contain;
+  filter: brightness(1);
 }
 
 .sidebar-nav {
@@ -94,7 +95,7 @@ body {
   border-radius: var(--radius-sm);
   border: none;
   background: transparent;
-  color: var(--text-secondary);
+  color: rgba(175, 217, 245, 0.5);
   cursor: pointer;
   display: flex;
   align-items: center;
@@ -103,12 +104,12 @@ body {
 }
 
 .nav-item:hover {
-  background: var(--bg-card-hover);
-  color: var(--text-primary);
+  background: rgba(175, 217, 245, 0.1);
+  color: var(--brand-hover);
 }
 
 .nav-item.active {
-  background: var(--brand-glow);
+  background: rgba(175, 217, 245, 0.15);
   color: var(--brand-hover);
 }
 
@@ -126,12 +127,12 @@ body {
    HEADER
    ============================================================ */
 .app-header {
-  padding: 20px 32px 16px;
+  padding: 16px 32px 14px;
   display: flex;
   align-items: center;
   justify-content: space-between;
   border-bottom: 1px solid var(--border);
-  background: rgba(255, 255, 255, 0.02);
+  background: #1B284E;
   backdrop-filter: blur(8px);
   flex-shrink: 0;
 }
@@ -139,14 +140,22 @@ body {
 .header-left {
   display: flex;
   flex-direction: column;
-  gap: 2px;
+  align-items: flex-start;
+  gap: 4px;
+}
+
+.header-logo {
+  height: 36px;
+  width: auto;
+  object-fit: contain;
 }
 
 .header-title {
-  font-size: 22px;
-  font-weight: 700;
-  color: var(--text-primary);
-  letter-spacing: -0.3px;
+  font-size: 14px;
+  font-weight: 500;
+  color: var(--brand-hover);
+  letter-spacing: 0.2px;
+  margin: 0;
 }
 
 .header-subtitle {
