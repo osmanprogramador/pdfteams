@@ -75,6 +75,15 @@ const App: React.FC = () => {
     setRanges([...ranges, { start: newStart, end: pageCount, id: Date.now().toString() }]);
   };
 
+  // Cria um intervalo individual para cada página do PDF
+  const splitAllPages = () => {
+    const allRanges: PageRange[] = [];
+    for (let i = 1; i <= pageCount; i++) {
+      allRanges.push({ start: i, end: i, id: (Date.now() + i).toString() });
+    }
+    setRanges(allRanges);
+  };
+
   const removeRange = (id: string) => {
     if (ranges.length > 1) setRanges(ranges.filter(r => r.id !== id));
   };
@@ -242,9 +251,14 @@ const App: React.FC = () => {
                       <Text weight="semibold" size={400} block>Definir partes do PDF</Text>
                       <Text size={200} className="muted">Cada intervalo gerará um arquivo separado para download</Text>
                     </div>
-                    <button className="add-btn" onClick={addRange}>
-                      + Adicionar intervalo
-                    </button>
+                    <div className="ranges-header-actions">
+                      <button className="split-all-btn" onClick={splitAllPages} title={`Criar ${pageCount} intervalos, um por página`}>
+                        ⚡ Página por página
+                      </button>
+                      <button className="add-btn" onClick={addRange}>
+                        + Adicionar intervalo
+                      </button>
+                    </div>
                   </div>
 
                   <div className="ranges-list">
