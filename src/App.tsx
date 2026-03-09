@@ -361,10 +361,10 @@ const App: React.FC = () => {
 
           {/* Footer */}
           <footer className="app-footer">
-            <Text size={100} className="muted">
+            <Text size={100} className="muted" block>
               Separador de PDF · Processamento local · Seus arquivos nunca saem do dispositivo
             </Text>
-            <Text size={100} className="muted">
+            <Text size={100} className="muted" block>
               Desenvolvido pela GEI. Todos os direitos reservados.
             </Text>
           </footer>
