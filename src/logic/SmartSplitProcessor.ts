@@ -1,6 +1,5 @@
 import * as pdfjsLib from 'pdfjs-dist';
 
-// Usar worker local via URL pública
 pdfjsLib.GlobalWorkerOptions.workerSrc = `${import.meta.env.BASE_URL}pdf.worker.min.mjs`;
 
 export interface SmartSplitConfig {
@@ -38,9 +37,7 @@ export function loadConfig(): SmartSplitConfig {
     try {
         const saved = localStorage.getItem(CONFIG_KEY);
         if (saved) return { ...defaultConfig, ...JSON.parse(saved) };
-    } catch {
-        // ignore
-    }
+    } catch { /* ignore */ }
     return { ...defaultConfig };
 }
 
@@ -48,9 +45,6 @@ export function saveConfig(config: SmartSplitConfig) {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }
 
-/**
- * Extrai texto de todas as páginas do PDF usando PDF.js
- */
 async function extractPagesText(pdfBytes: Uint8Array): Promise<string[]> {
     const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     const pages: string[] = [];
@@ -64,41 +58,66 @@ async function extractPagesText(pdfBytes: Uint8Array): Promise<string[]> {
 }
 
 /**
- * Extrai campo com padrão: <rótulo> <código numérico opcional> - <valor>
- * Exemplo: "Func.: 052191 - FULANO DOS SANTOS" → "FULANO DOS SANTOS"
- * Exemplo: "Depto.: 000025 - PROJETO ITUETA E RESPLENDOR" → "PROJETO ITUETA E RESPLENDOR"
+ * Escapa o rótulo para uso em regex e permite variação de acentos.
+ * Ex: "Período:" → "Per[ií]odo[:]?" case-insensitive
+ */
+function escaparRotulo(rotulo: string): string {
+    return rotulo
+        .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
+        // Flexibiliza caracteres acentuados comuns
+        .replace('í', '[íi]')
+        .replace('ê', '[êe]')
+        .replace('ã', '[ãa]')
+        .replace('é', '[ée]');
+}
+
+/**
+ * Extrai campo que usa CÓDIGO NUMÉRICO antes do valor:
+ * Ex: "Func.: 052191 - FULANO DOS SANTOS"  →  "FULANO DOS SANTOS"
+ * Ex: "Depto.: 000025 - PROJETO ITUETA"   →  "PROJETO ITUETA E RESPLENDOR"
+ *
+ * Exigir o código numérico evita casamento errado quando os labels aparecem
+ * em ordem inesperada no texto extraído pelo PDF.js.
  */
 function extrairCampoComCodigo(texto: string, rotulo: string): string {
-    const rotuloEsc = rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Tenta padrão com código numérico: RÓTULO 000000 - VALOR
-    let regex = new RegExp(rotuloEsc + '\\s*[\\d]+\\s*-\\s*([A-ZÀ-Ú][A-ZÀ-Ú\\s]+)', 'i');
-    let match = texto.match(regex);
-    if (match) return match[1].trim();
-    // Tenta padrão sem código
-    regex = new RegExp(rotuloEsc + '\\s*([A-ZÀ-Ú][A-ZÀ-Ú\\s]+)', 'i');
-    match = texto.match(regex);
-    if (match) return match[1].trim();
-    return '';
+    const rotuloEsc = escaparRotulo(rotulo);
+    // CÓDIGO (4-6 dígitos) + DASH + VALOR (para antes do próximo label "PALAVRA:" ou data)
+    const regex = new RegExp(
+        rotuloEsc + '\\s*\\d{4,6}\\s*-\\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][^\\d:]{2,60}?)(?=\\s*\\S+\\s*[.:,]|\\d{2}\\s*[/\\-]|$)',
+        'i'
+    );
+    const match = texto.match(regex);
+    return match ? match[1].trim() : '';
 }
 
 /**
- * Extrai o período do texto e formata como YYYYMM.
- * Exemplo: "Período: 02/2026" → "202602"
+ * Extrai período no formato MM/AAAA e converte para AAAAMM.
+ * Aceita variações de espaço e acentuação no rótulo.
+ * Ex: "Período: 02/2026" → "202602"
  */
 function extrairPeriodo(texto: string, rotulo: string): string {
-    const rotuloEsc = rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    const regex = new RegExp(rotuloEsc + '\\s*(\\d{2})\\/(\\d{4})', 'i');
+    const rotuloEsc = escaparRotulo(rotulo);
+    // Permite espaço ao redor da barra e barras de diferentes tipos
+    const regex = new RegExp(rotuloEsc + '\\s*(\\d{2})\\s*[/\\-]\\s*(\\d{4})', 'i');
     const match = texto.match(regex);
-    if (match) {
-        const mes = match[1];
-        const ano = match[2];
-        return `${ano}${mes}`;
-    }
+    if (match) return `${match[2]}${match[1]}`; // AAAA + MM
     return '';
 }
 
 /**
- * Normaliza string para usar no nome do arquivo: remove acentos, espaços → _
+ * Abrevia o nome para PRIMEIRO + ÚLTIMO nome, filtrando preposições.
+ * Ex: "FERNANDA ALVES DE OLIVEIRA" → "FERNANDA OLIVEIRA"
+ * Ex: "JOSE CARLOS" → "JOSE CARLOS" (mantém, já é curto)
+ */
+function abreviarNome(nome: string): string {
+    const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
+    const partes = nome.trim().split(/\s+/).filter(p => !preposicoes.has(p.toUpperCase()));
+    if (partes.length <= 2) return partes.join(' ');
+    return `${partes[0]} ${partes[partes.length - 1]}`;
+}
+
+/**
+ * Normaliza string para nome de arquivo: remove acentos, espaços → _
  */
 function normalizar(texto: string): string {
     return texto
@@ -109,9 +128,6 @@ function normalizar(texto: string): string {
         .toUpperCase();
 }
 
-/**
- * Gera preview dos nomes que serão gerados antes do download.
- */
 export async function previewSmartSplit(
     pdfBytes: Uint8Array,
     config: SmartSplitConfig
@@ -119,12 +135,13 @@ export async function previewSmartSplit(
     const pagesText = await extractPagesText(pdfBytes);
     return pagesText.map((texto, idx) => {
         const nomeRaw = extrairCampoComCodigo(texto, config.rotuloNome);
-        const periodoRaw = extrairPeriodo(texto, config.rotuloPeriodo);
         const deptoRaw = extrairCampoComCodigo(texto, config.rotuloDepto);
+        const periodoRaw = extrairPeriodo(texto, config.rotuloPeriodo);
 
-        const nome = nomeRaw ? normalizar(nomeRaw) : '';
-        const periodo = periodoRaw || '';
+        const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
+        const nome = nomeAbrev ? normalizar(nomeAbrev) : '';
         const depto = deptoRaw ? normalizar(deptoRaw) : '';
+        const periodo = periodoRaw || '';
         const encontrado = !!(nome && periodo);
 
         const prefixos = [
@@ -135,12 +152,12 @@ export async function previewSmartSplit(
             config.equipe,
             config.tipoDoc,
             nome || `PAGINA_${idx + 1}`,
-        ].filter(Boolean).join('_');
+        ].join('_');
 
         return {
             nomeArquivo: `${prefixos}.pdf`,
             pagina: idx + 1,
-            nomeColaborador: nomeRaw || '',
+            nomeColaborador: nomeAbrev || nomeRaw || '',
             periodo: periodoRaw || '',
             depto: deptoRaw || '',
             encontrado,
