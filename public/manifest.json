@@ -15,8 +15,8 @@
         "outline": "outline.png"
     },
     "name": {
-        "short": "Separador de PDF",
-        "full": "Separador de PDF para Microsoft Teams"
+        "short": "Osman Santos",
+        "full": "Osman Santos - Separador de PDF"
     },
     "description": {
         "short": "Divida PDFs facilmente no Teams.",
@@ -26,7 +26,7 @@
     "staticTabs": [
         {
             "entityId": "pdfseparador",
-            "name": "Separador de PDF",
+            "name": "Osman Santos",
             "contentUrl": "https://osmanprogramador.github.io/pdfteams/",
             "websiteUrl": "https://osmanprogramador.github.io/pdfteams/",
             "scopes": [
