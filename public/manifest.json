@@ -1,11 +1,11 @@
 {
     "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
     "manifestVersion": "1.16",
-    "version": "1.0.0",
+    "version": "1.0.1",
     "id": "a8c2f3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
     "packageName": "com.pdfseparador.teams",
     "developer": {
-        "name": "Osman Programador",
+        "name": "Osman Santos",
         "websiteUrl": "https://osmanprogramador.github.io/pdfteams",
         "privacyUrl": "https://osmanprogramador.github.io/pdfteams",
         "termsOfUseUrl": "https://osmanprogramador.github.io/pdfteams"
@@ -15,8 +15,8 @@
         "outline": "outline.png"
     },
     "name": {
-        "short": "Osman Santos",
-        "full": "Osman Santos - Separador de PDF"
+        "short": "Separador de PDF",
+        "full": "Separador de PDF para Microsoft Teams"
     },
     "description": {
         "short": "Divida PDFs facilmente no Teams.",
@@ -26,7 +26,7 @@
     "staticTabs": [
         {
             "entityId": "pdfseparador",
-            "name": "Osman Santos",
+            "name": "Separador de PDF",
             "contentUrl": "https://osmanprogramador.github.io/pdfteams/",
             "websiteUrl": "https://osmanprogramador.github.io/pdfteams/",
             "scopes": [
