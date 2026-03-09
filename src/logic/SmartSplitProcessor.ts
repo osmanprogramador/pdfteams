@@ -45,123 +45,143 @@ export function saveConfig(config: SmartSplitConfig) {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }
 
-async function extractPagesText(pdfBytes: Uint8Array): Promise<string[]> {
+/**
+ * Extrai e normaliza o texto de todas as páginas.
+ * Remove acentos, converte para maiúsculas e limpa espaços extras.
+ */
+async function extractAndNormalizePages(pdfBytes: Uint8Array): Promise<string[]> {
     const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     const pages: string[] = [];
     for (let i = 1; i <= doc.numPages; i++) {
         const page = await doc.getPage(i);
         const content = await page.getTextContent();
-        const text = content.items.map((item: any) => item.str).join(' ');
-        pages.push(text);
+        // Une os blocos com espaço e normaliza tudo
+        const rawText = content.items.map((item: any) => item.str).join(' ');
+        const normalized = rawText
+            .normalize('NFD')
+            .replace(/[\u0300-\u036f]/g, '') // Remove acentos
+            .replace(/\s+/g, ' ')            // Remove espaços extras/novas linhas
+            .toUpperCase()
+            .trim();
+        pages.push(normalized);
     }
     return pages;
 }
 
 /**
- * Escapa o rótulo para uso em regex e permite variação de acentos.
- * Ex: "Período:" → "Per[ií]odo[:]?" case-insensitive
+ * Escapa o rótulo e permite que o dois pontos seja opcional.
  */
-function escaparRotulo(rotulo: string): string {
+function prepararRotulo(rotulo: string): string {
     return rotulo
+        .normalize('NFD')
+        .replace(/[\u0300-\u036f]/g, '')
+        .toUpperCase()
         .replace(/[.*+?^${}()|[\]\\]/g, '\\$&')
-        // Flexibiliza caracteres acentuados comuns
-        .replace('í', '[íi]')
-        .replace('ê', '[êe]')
-        .replace('ã', '[ãa]')
-        .replace('é', '[ée]');
+        .replace(':', '\\s*[:]?');
 }
 
 /**
- * Extrai campo que usa CÓDIGO NUMÉRICO antes do valor:
- * Ex: "Func.: 052191 - FULANO DOS SANTOS"  →  "FULANO DOS SANTOS"
- * Ex: "Depto.: 000025 - PROJETO ITUETA"   →  "PROJETO ITUETA E RESPLENDOR"
- *
- * Exigir o código numérico evita casamento errado quando os labels aparecem
- * em ordem inesperada no texto extraído pelo PDF.js.
+ * Extrai um campo (Nome ou Depto) baseado no rótulo.
+ * Aceita opcionalmente um código numérico antes do valor.
  */
-function extrairCampoComCodigo(texto: string, rotulo: string): string {
-    const rotuloEsc = escaparRotulo(rotulo);
-    // CÓDIGO (4-7 dígitos) + DASH + VALOR (para antes do próximo label "PALAVRA:" ou data ou fim de linha)
-    // Regex refinada para ser mais permissiva com o conteúdo mas parar em delimitadores conhecidos
+function extrairCampo(texto: string, rotulo: string): string {
+    const rotEsc = prepararRotulo(rotulo);
+    // Regex: Procura o rótulo, pula o código (se houver), captura o texto.
+    // Para no próximo rótulo provável (Palavra seguida de :) ou em uma data (00/0000).
     const regex = new RegExp(
-        rotuloEsc + '\\s*\\d{4,7}\\s*-\\s*([A-Za-zÁÀÂÃÉÊÍÓÔÕÚÜÇáàâãéêíóôõúüç][^\\d:]{2,60}?)(?=\\s*\\S+\\s*[.:,]|\\d{2}\\s*[/\\-]|$)',
+        rotEsc + '\\s*(?:\\d+\\s*-\\s*)?([^:]{2,60}?)(?=\\s+[A-Z]{3,15}\\s*[:]|\\d{2}/\\d{4}|\\s*$)',
         'i'
     );
     const match = texto.match(regex);
-    return match ? match[1].trim() : '';
-}
-
-/**
- * Extrai período no formato MM/AAAA e converte para AAAAMM.
- * Aceita variações de espaço e acentuação no rótulo.
- * Ex: "Período: 02/2026" → "202602"
- */
-function extrairPeriodo(texto: string, rotulo: string): string {
-    const rotuloEsc = escaparRotulo(rotulo);
-    // Permite espaço ao redor da barra e barras de diferentes tipos
-    const regex = new RegExp(rotuloEsc + '\\s*(\\d{2})\\s*[/\\-]\\s*(\\d{4})', 'i');
-    const match = texto.match(regex);
-    if (match) return `${match[2]}${match[1]}`; // AAAA + MM = AAAAMM
+    if (match) {
+        let val = match[1].trim();
+        // Remove lixo comum no final se a regex foi gulosa demais
+        return val.replace(/\s+[A-Z]{3,10}:.*$/, '').trim();
+    }
     return '';
 }
 
 /**
- * Abrevia o nome para PRIMEIRO + ÚLTIMO nome, filtrando preposições.
- * Ex: "FERNANDA ALVES DE OLIVEIRA" → "FERNANDA OLIVEIRA"
+ * Extrai o período (MM/AAAA) e retorna AAAAMM.
+ */
+function extrairPeriodo(texto: string, rotulo: string): string {
+    const rotEsc = prepararRotulo(rotulo);
+    // Tenta primeiro com o rótulo específico
+    const regex = new RegExp(rotEsc + '\\s*(\\d{2})\\s*[/\\\\-\\.]\\s*(\\d{4})', 'i');
+    let match = texto.match(regex);
+    if (match) return `${match[2]}${match[1]}`;
+
+    // Fallback: procura a primeira ocorrência de MM/AAAA que pareça uma competência
+    const fallback = /(\d{2})[/\-\.](\d{4})/g;
+    let feb;
+    while ((feb = fallback.exec(texto)) !== null) {
+        // Retorna a primeira data encontrada como período
+        return `${feb[2]}${feb[1]}`;
+    }
+    return '';
+}
+
+/**
+ * Abrevia o nome para PRIMEIRO + ÚLTIMO nome.
  */
 export function abreviarNome(nome: string): string {
+    if (!nome) return '';
     const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
-    const partes = nome.trim().split(/\s+/).filter(p => !preposicoes.has(p.toUpperCase()));
-    if (partes.length <= 2) return partes.join(' ');
-    // Retorna primeiro e último
+    const partes = nome.trim().split(/\s+/).filter(p => p.length > 2 && !preposicoes.has(p.toUpperCase()));
+    if (partes.length === 0) return nome;
+    if (partes.length === 1) return partes[0];
     return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
 /**
- * Normaliza string para nome de arquivo: remove acentos, espaços → _
+ * Normaliza string para nome de arquivo (seguro).
  */
-export function normalizar(texto: string): string {
+export function normalizarParaArquivo(texto: string): string {
     return texto
-        .normalize('NFD')
-        .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, '_')
         .replace(/[^A-Za-z0-9_]/g, '')
         .toUpperCase();
 }
 
 /**
- * Gera preview dos nomes que serão gerados antes do download.
+ * Processamento principal para gerar o preview.
  */
 export async function previewSmartSplit(
     pdfBytes: Uint8Array,
     config: SmartSplitConfig
 ): Promise<SmartSplitResult[]> {
-    const pagesText = await extractPagesText(pdfBytes);
+    const pagesText = await extractAndNormalizePages(pdfBytes);
+
     return pagesText.map((texto, idx) => {
-        const nomeRaw = extrairCampoComCodigo(texto, config.rotuloNome);
-        const deptoRaw = extrairCampoComCodigo(texto, config.rotuloDepto);
+        // Extração dos campos brutos
+        let nomeRaw = extrairCampo(texto, config.rotuloNome);
+        let deptoRaw = extrairCampo(texto, config.rotuloDepto);
         const periodoRaw = extrairPeriodo(texto, config.rotuloPeriodo);
 
+        // Debug simples: Se o nome cair no depto (comum em extrações bagunçadas), tenta inverter
+        // mas aqui vamos apenas garantir que o nome seja abreviado e limpo.
+
         const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
-        const nome = nomeAbrev ? normalizar(nomeAbrev) : '';
-        const depto = deptoRaw ? normalizar(deptoRaw) : '';
+        const nomeNorm = nomeAbrev ? normalizarParaArquivo(nomeAbrev) : '';
+        const deptoNorm = deptoRaw ? normalizarParaArquivo(deptoRaw) : '';
         const periodo = periodoRaw || '';
-        const encontrado = !!(nome && periodo);
+
+        const encontrado = !!(nomeNorm && periodo);
 
         const prefixos = [
             periodo || 'SEM_PERIODO',
             config.empresa,
             config.projeto,
-            depto || 'SEM_DEPTO',
+            deptoNorm || 'SEM_DEPTO',
             config.equipe,
             config.tipoDoc,
-            nome || `PAGINA_${idx + 1}`,
+            nomeNorm || `PAGINA_${idx + 1}`,
         ].join('_');
 
         return {
             nomeArquivo: `${prefixos}.pdf`,
             pagina: idx + 1,
-            nomeColaborador: nomeAbrev || nomeRaw || '',
+            nomeColaborador: nomeRaw || '',
             periodo: periodoRaw || '',
             depto: deptoRaw || '',
             encontrado,
