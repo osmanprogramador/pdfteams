@@ -574,9 +574,22 @@ const App: React.FC = () => {
                               {smartPreview.filter(r => r.encontrado).length} de {smartPreview.length} com dados identificados
                             </Text>
                           </div>
-                          <Badge appearance="filled" color={selectedPages.size > 0 ? 'success' : 'important'}>
-                            {selectedPages.size} de {smartPreview.length} páginas
-                          </Badge>
+                          <div className="preview-header-right">
+                            <Button
+                              size="small"
+                              appearance="subtle"
+                              onClick={() => {
+                                const text = smartPreview.map(p => `PÁGINA ${p.pagina}:\n${p.rawText}`).join('\n\n---\n\n');
+                                alert("COPIE O TEXTO ABAIXO E ME ENVIE:\n\n" + text.substring(0, 2000) + (text.length > 2000 ? "..." : ""));
+                                console.log("TEXTO BRUTO COMPLETO:", text);
+                              }}
+                            >
+                              🔍 Ver Texto Bruto
+                            </Button>
+                            <Badge appearance="filled" color={selectedPages.size > 0 ? 'success' : 'important'}>
+                              {selectedPages.size} de {smartPreview.length} páginas
+                            </Badge>
+                          </div>
                         </div>
                         <div className="preview-table-wrap">
                           <table className="preview-table">

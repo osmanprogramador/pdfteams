@@ -20,6 +20,7 @@ export interface SmartSplitResult {
     periodo: string;
     depto: string;
     encontrado: boolean;
+    rawText?: string;
 }
 
 export const CONFIG_KEY = 'smartSplitConfig';
@@ -58,7 +59,17 @@ async function extractRawPagesText(pdfBytes: Uint8Array): Promise<string[]> {
     for (let i = 1; i <= doc.numPages; i++) {
         const page = await doc.getPage(i);
         const content = await page.getTextContent();
-        const text = content.items.map((item: any) => item.str || '').join(' ');
+
+        // Ordena itens por posição: Y descendente (topo para baixo), X ascendente (esquerda para direita)
+        const sortedItems = content.items.sort((a: any, b: any) => {
+            // No PDF.js, a posição vertical (transform[5]) geralmente aumenta de baixo para cima.
+            // Para leitura humana, queremos do topo para baixo.
+            const yDiff = b.transform[5] - a.transform[5];
+            if (Math.abs(yDiff) > 5) return yDiff; // Diferença significativa de linha
+            return a.transform[4] - b.transform[4]; // Mesma linha, ordena por X
+        });
+
+        const text = sortedItems.map((item: any) => item.str || '').join('  ');
         pages.push(text);
     }
     return pages;
@@ -69,6 +80,7 @@ function normalizarParaBusca(texto: string): string {
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, ' ')
+        .replace(/[^\x20-\x7E\s]/g, '') // Remove caracteres não imprimíveis residuais
         .toUpperCase()
         .trim();
 }
@@ -77,66 +89,91 @@ function escaparParaRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
+function simplificar(str: string): string {
+    return str.replace(/[^A-Z0-9]/gi, '').toUpperCase();
+}
+
 /**
- * Extração de campo via RegEx robusta com delimitação por rótulos prováveis.
+ * Extração de campo via RegEx robusta e Fuzzy Matching.
  */
 function extrairCampo(texto: string, rotulo: string): string {
     if (!rotulo) return '';
     const textoNorm = normalizarParaBusca(texto);
     const rotNorm = normalizarParaBusca(rotulo);
 
-    // Escapa o rótulo e permite flexibilidade com pontos e dois-pontos
-    // Remove o sinal final do rótulo para fazer busca flexível
+    // 1. Tenta RegEx padrão (especialmente eficaz com a nova ordenação visual)
     const rBase = rotNorm.replace(/[:.]$/, '');
     const escaped = escaparParaRegex(rBase) + '[.:]?\\s*[:]?';
 
-    // Procura o rótulo e captura tudo até o próximo rótulo provável
-    // Delimitadores: Palavra capitalizada seguida de dois pontos (ex: "Cargo:"), data ou fim de linha
-    const regex = new RegExp(escaped + '\\s*([^:]+?)(?=\\s+[A-Z][a-z]{2,15}\\s*[:]|$|\\s*[A-Z]{3,15}\\s*[:]|\\s*\\d{2}[/.-]\\d{4})', 'i');
+    // Delimitadores: Palavra capitalizada + :, data, múltiplos espaços, ou final de linha
+    const regex1 = new RegExp(escaped + '\\s*([^:]{2,100}?)(\\s{3,}|\\s+[A-Z][a-zA-Z]{2,15}\\s*[:]|\\s*\\d{2}[/.-]\\d{4}|$)', 'i');
 
-    // Tenta encontrar todas as ocorrências e pega a que parece conter um valor real (não outro rótulo)
-    const matches = Array.from(textoNorm.matchAll(new RegExp(regex, 'gi')));
+    const tentarRegex = (re: RegExp): string | null => {
+        const match = textoNorm.match(re);
+        if (match) {
+            let val = match[1].trim();
+            // Remove códigos iniciais (ex: "000025 - ")
+            val = val.replace(/^[\d.-]+\s*[-/]\s*/, '').trim();
+            val = val.replace(/^[:.-]+\s*/, '').trim();
+            val = val.replace(/\s+/g, ' '); // Normaliza espaços internos
 
-    for (const match of matches) {
-        let val = match[1].trim();
-
-        // Se capturou o próprio rótulo (fragmentado), tenta limpar ou pula
-        if (val.includes(rotNorm.replace(/:/g, ''))) {
-            val = val.split(rotNorm.replace(/:/g, '')).pop()!.trim();
+            if (val && val.length > 2 && !val.endsWith(':')) return val;
         }
+        return null;
+    };
 
-        // Limpeza profunda:
-        // 1. Remove códigos iniciais ("001 - ", "123.456 - ")
-        val = val.replace(/^[\d.-]+\s*[-/]\s*/, '').trim();
-        // 2. Remove pontuação residual no início
-        val = val.replace(/^[:.-]+\s*/, '').trim();
+    const resReg = tentarRegex(regex1);
+    if (resReg) return resReg;
 
-        // Verifica se o valor não é apenas outro rótulo provável
-        if (val && val.length > 2 && !val.endsWith(':')) {
-            return val;
+    // 2. Fuzzy Match: Ignora espaços no rótulo (útil se o PDF tiver espaçamento entre letras)
+    const textoSimples = simplificar(textoNorm);
+    const rotSimples = simplificar(rotNorm);
+    const posSimples = textoSimples.indexOf(rotSimples);
+
+    if (posSimples !== -1) {
+        const rFuzzy = rotSimples.split('').join('\\s*[^A-Z0-9]{0,3}\\s*');
+        const reFuzzy = new RegExp(rFuzzy + '[.:]?\\s*[:]?\\s*([^:]{2,100}?)(\\s{3,}|[A-Z][a-z]+:|$)', 'i');
+        const mFuzzy = textoNorm.match(reFuzzy);
+        if (mFuzzy) {
+            let val = mFuzzy[1].trim()
+                .replace(/^[\d.-]+\s*[-/]\s*/, '')
+                .replace(/^[:.-]+\s*/, '')
+                .split(/\s{3,}/)[0].trim();
+            if (val && val.length > 2) return val;
+        }
+    }
+
+    // 3. Fallback Heurístico para Nome (Procura nomes em maiúsculo próximo ao início da página)
+    if (rotNorm.includes('FUNC') || rotNorm.includes('NOME')) {
+        const regexNome = /\b([A-Z]{3,}(?:\s+[A-Z]{2,}){1,4})\b/g;
+        const matches = Array.from(textoNorm.matchAll(regexNome));
+        for (const m of matches) {
+            const n = m[1].trim();
+            // Pula termos comuns do cabeçalho
+            if (n.length > 8 && !n.includes('ASSOCIACAO') && !n.includes('ESTADUAL') &&
+                !n.includes('AMBIENTAL') && n !== rotSimples && !rotNorm.includes(n)) {
+                return n;
+            }
         }
     }
 
     return '';
 }
 
-function extrairPeriodoRobusto(texto: string, rotulo: string): string {
+function extrairPeriodoRobusto(texto: string): string {
     const textoNorm = normalizarParaBusca(texto);
-    const rotNorm = normalizarParaBusca(rotulo);
 
-    const rBase = rotNorm.replace(/[:.]$/, '');
-    const escaped = escaparParaRegex(rBase) + '[.:]?\\s*[:]?';
-
-    const regexComRotulo = new RegExp(escaped + '\\s*(0[1-9]|1[0-2])\\s*[/.-]\\s*(20\\d{2})', 'i');
-    const match = textoNorm.match(regexComRotulo);
-    if (match) return `${match[2]}${match[1]}`;
-
-    // Fallback: Procura qualquer data MM/YYYY no texto
-    const regexGlobal = /(0[1-9]|1[0-2])[/.-](20\d{2})/g;
+    // 1. Procura MM/YYYY ou MM.YYYY ou MM-YYYY
+    const regexData = /(0[1-9]|1[0-2])\s*[/.-]\s*(20\d{2})/g;
     let m;
-    while ((m = regexGlobal.exec(textoNorm)) !== null) {
+    while ((m = regexData.exec(textoNorm)) !== null) {
         return `${m[2]}${m[1]}`;
     }
+
+    // 2. Procura apenas números grudados (ex: 022026 -> 202602)
+    const regexGrudado = /\b(0[1-9]|1[0-2])(20\d{2})\b/g;
+    const mG = regexGrudado.exec(textoNorm);
+    if (mG) return `${mG[2]}${mG[1]}`;
 
     return '';
 }
@@ -152,7 +189,11 @@ export function abreviarNome(nome: string): string {
 
 function abreviarDepto(depto: string): string {
     const d = depto.trim().toUpperCase();
-    return DEPT_MAPPING[d] || depto;
+    // Procura se qualquer chave existe dentro do texto do departamento
+    for (const key in DEPT_MAPPING) {
+        if (d.includes(key.toUpperCase())) return DEPT_MAPPING[key];
+    }
+    return depto;
 }
 
 export function limparParaArquivo(str: string): string {
@@ -170,10 +211,19 @@ export async function previewSmartSplit(
 ): Promise<SmartSplitResult[]> {
     const rawPages = await extractRawPagesText(pdfBytes);
 
+    // Debug: Log raw text to help identify why extraction might fail
+    console.log('--- SMART SPLIT DEBUG ---');
+    console.log('Config:', config);
+    rawPages.forEach((text, i) => {
+        console.log(`Página ${i + 1} Texto Bruto (primeiros 500 chars):`, text.substring(0, 500));
+        // console.log(`Página ${i + 1} Texto Completo:`, text); // Descomente para debug completo
+    });
+    console.log('-------------------------');
+
     return rawPages.map((rawText, idx) => {
         const nomeRaw = extrairCampo(rawText, config.rotuloNome);
         const deptoRaw = extrairCampo(rawText, config.rotuloDepto);
-        const periodoRaw = extrairPeriodoRobusto(rawText, config.rotuloPeriodo);
+        const periodoRaw = extrairPeriodoRobusto(rawText);
 
         const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
         const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
@@ -199,7 +249,8 @@ export async function previewSmartSplit(
             nomeColaborador: nomeRaw || '',
             periodo: periodoRaw || '',
             depto: deptoRaw || '',
-            encontrado
+            encontrado,
+            rawText: rawText
         };
     });
 }
