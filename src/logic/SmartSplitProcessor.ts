@@ -40,12 +40,6 @@ const DEPT_MAPPING: Record<string, string> = {
     'PROJETO CONSELHEIRO PENA': 'CONS_PENA',
 };
 
-// Lista de rótulos comuns em contracheques para servir de delimitadores de campo
-const LABELS_DELIMITADORES = [
-    'Func.:', 'Func:', 'Periodo:', 'Período:', 'Depto.:', 'Depto:',
-    'Cargo:', 'Matricula:', 'Matrícula:', 'CTPS:', 'Admissão:', 'Admissao:', 'CPF:'
-];
-
 export function loadConfig(): SmartSplitConfig {
     try {
         const saved = localStorage.getItem(CONFIG_KEY);
@@ -84,91 +78,75 @@ function escaparParaRegex(str: string): string {
 }
 
 /**
- * Estratégia baseada em posição:
- * 1. Mapeia todas as ocorrências de todos os rótulos conhecidos no texto.
- * 2. O valor de um rótulo é o texto entre ele e o próximo rótulo da lista.
+ * Extração de campo via RegEx robusta com delimitação por rótulos prováveis.
  */
-function extrairCamposPorPosicao(texto: string, config: SmartSplitConfig): { nome: string, depto: string, periodo: string } {
+function extrairCampo(texto: string, rotulo: string): string {
+    if (!rotulo) return '';
     const textoNorm = normalizarParaBusca(texto);
+    const rotNorm = normalizarParaBusca(rotulo);
 
-    // Lista de todos os rótulos a monitorar (configurados + genéricos)
-    const todosLabels = Array.from(new Set([
-        ...LABELS_DELIMITADORES,
-        config.rotuloNome,
-        config.rotuloDepto,
-        config.rotuloPeriodo
-    ])).map(l => normalizarParaBusca(l));
+    // Escapa o rótulo e permite flexibilidade com pontos e dois-pontos
+    // Remove o sinal final do rótulo para fazer busca flexível
+    const rBase = rotNorm.replace(/[:.]$/, '');
+    const escaped = escaparParaRegex(rBase) + '[.:]?\\s*[:]?';
 
-    // Encontra todas as posições [posicao, tamanho_label, label_norm]
-    const ocorrencias: { pos: number, len: number, label: string }[] = [];
-    todosLabels.forEach(label => {
-        // Regex para encontrar o label (com : opcional se for o caso)
-        const lEsc = escaparParaRegex(label).replace(':', '[:]?');
-        const regex = new RegExp(lEsc, 'gi');
-        let m;
-        while ((m = regex.exec(textoNorm)) !== null) {
-            ocorrencias.push({ pos: m.index, len: m[0].length, label });
-        }
-    });
+    // Procura o rótulo e captura tudo até o próximo rótulo provável
+    // Delimitadores: Palavra capitalizada seguida de dois pontos (ex: "Cargo:"), data ou fim de linha
+    const regex = new RegExp(escaped + '\\s*([^:]+?)(?=\\s+[A-Z][a-z]{2,15}\\s*[:]|$|\\s*[A-Z]{3,15}\\s*[:]|\\s*\\d{2}[/.-]\\d{4})', 'i');
 
-    // Ordena por posição no texto
-    ocorrencias.sort((a, b) => a.pos - b.pos);
+    // Tenta encontrar todas as ocorrências e pega a que parece conter um valor real (não outro rótulo)
+    const matches = Array.from(textoNorm.matchAll(new RegExp(regex, 'gi')));
 
-    const obterValor = (labelAlvo: string): string => {
-        const targetNorm = normalizarParaBusca(labelAlvo);
-        const alvoOcorrencias = ocorrencias
-            .map((o, i) => o.label === targetNorm ? i : -1)
-            .filter(i => i !== -1);
+    for (const match of matches) {
+        let val = match[1].trim();
 
-        for (const idx of alvoOcorrencias) {
-            const start = ocorrencias[idx].pos + ocorrencias[idx].len;
-            // O fim é a posição da próxima ocorrência, ou o fim do texto
-            const end = (idx + 1 < ocorrencias.length) ? ocorrencias[idx + 1].pos : textoNorm.length;
-
-            let val = textoNorm.substring(start, end).trim();
-
-            // Limpeza básica: remove código inicial (ex: "001 - ")
-            val = val.replace(/^\d+\s*[-]\s*/, '').trim();
-
-            // Se o valor extraído for vazio ou for apenas outro label conhecido, ignora esta ocorrência
-            const valNorm = normalizarParaBusca(val);
-            const ehLabel = todosLabels.some(l => valNorm === l || valNorm.startsWith(l));
-
-            if (val && !ehLabel) {
-                return val;
-            }
+        // Se capturou o próprio rótulo (fragmentado), tenta limpar ou pula
+        if (val.includes(rotNorm.replace(/:/g, ''))) {
+            val = val.split(rotNorm.replace(/:/g, '')).pop()!.trim();
         }
 
-        return '';
-    };
+        // Limpeza profunda:
+        // 1. Remove códigos iniciais ("001 - ", "123.456 - ")
+        val = val.replace(/^[\d.-]+\s*[-/]\s*/, '').trim();
+        // 2. Remove pontuação residual no início
+        val = val.replace(/^[:.-]+\s*/, '').trim();
 
-    const nome = obterValor(config.rotuloNome);
-    const depto = obterValor(config.rotuloDepto);
-
-    // Período específico
-    let periodoRaw = obterValor(config.rotuloPeriodo);
-    // Validação de MM/YYYY no período extraído
-    const matchData = periodoRaw.match(/(0[1-9]|1[0-2])[/.-](20\d{2})/);
-    let periodo = matchData ? `${matchData[2]}${matchData[1]}` : '';
-
-    // Fallback de período se não encontrou pelo rótulo ou se ficou vazio
-    if (!periodo) {
-        const regexFallback = /(0[1-9]|1[0-2])[/.-](20\d{2})/g;
-        let m;
-        while ((m = regexFallback.exec(textoNorm)) !== null) {
-            periodo = `${m[2]}${m[1]}`;
-            break; // Pega a primeira data válida
+        // Verifica se o valor não é apenas outro rótulo provável
+        if (val && val.length > 2 && !val.endsWith(':')) {
+            return val;
         }
     }
 
-    return { nome, depto, periodo };
+    return '';
+}
+
+function extrairPeriodoRobusto(texto: string, rotulo: string): string {
+    const textoNorm = normalizarParaBusca(texto);
+    const rotNorm = normalizarParaBusca(rotulo);
+
+    const rBase = rotNorm.replace(/[:.]$/, '');
+    const escaped = escaparParaRegex(rBase) + '[.:]?\\s*[:]?';
+
+    const regexComRotulo = new RegExp(escaped + '\\s*(0[1-9]|1[0-2])\\s*[/.-]\\s*(20\\d{2})', 'i');
+    const match = textoNorm.match(regexComRotulo);
+    if (match) return `${match[2]}${match[1]}`;
+
+    // Fallback: Procura qualquer data MM/YYYY no texto
+    const regexGlobal = /(0[1-9]|1[0-2])[/.-](20\d{2})/g;
+    let m;
+    while ((m = regexGlobal.exec(textoNorm)) !== null) {
+        return `${m[2]}${m[1]}`;
+    }
+
+    return '';
 }
 
 export function abreviarNome(nome: string): string {
     if (!nome) return '';
     const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
     const partes = nome.trim().split(/\s+/).filter(part => part.length > 2 && !preposicoes.has(part.toUpperCase()));
-    if (partes.length <= 2) return partes.join(' ');
+    if (partes.length === 0) return nome;
+    if (partes.length === 1) return partes[0];
     return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
@@ -193,18 +171,20 @@ export async function previewSmartSplit(
     const rawPages = await extractRawPagesText(pdfBytes);
 
     return rawPages.map((rawText, idx) => {
-        const { nome, depto, periodo } = extrairCamposPorPosicao(rawText, config);
+        const nomeRaw = extrairCampo(rawText, config.rotuloNome);
+        const deptoRaw = extrairCampo(rawText, config.rotuloDepto);
+        const periodoRaw = extrairPeriodoRobusto(rawText, config.rotuloPeriodo);
 
-        const nomeAbrev = nome ? abreviarNome(nome) : '';
+        const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
         const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
 
-        const deptoAbrev = depto ? abreviarDepto(depto) : '';
+        const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw) : '';
         const deptoFinal = deptoAbrev ? limparParaArquivo(deptoAbrev) : '';
 
-        const encontrado = !!(nomeFinal && periodo);
+        const encontrado = !!(nomeFinal && periodoRaw);
 
         const nomeArquivo = [
-            periodo || 'SEM_PERIODO',
+            periodoRaw || 'SEM_PERIODO',
             config.empresa,
             config.projeto,
             deptoFinal || 'SEM_DEPTO',
@@ -216,9 +196,9 @@ export async function previewSmartSplit(
         return {
             nomeArquivo,
             pagina: idx + 1,
-            nomeColaborador: nome || '',
-            periodo: periodo || '',
-            depto: depto || '',
+            nomeColaborador: nomeRaw || '',
+            periodo: periodoRaw || '',
+            depto: deptoRaw || '',
             encontrado
         };
     });
