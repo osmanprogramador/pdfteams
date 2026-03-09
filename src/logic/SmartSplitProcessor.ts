@@ -34,6 +34,18 @@ export const defaultConfig: SmartSplitConfig = {
     rotuloDepto: 'Depto.:',
 };
 
+// Mapeamento de abreviações de departamentos
+const DEPT_MAPPING: Record<string, string> = {
+    'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
+    'PROJETO CONSELHEIRO PENA': 'CONS_PENA',
+};
+
+// Lista de rótulos comuns em contracheques para servir de delimitadores de campo
+const LABELS_DELIMITADORES = [
+    'Func.:', 'Func:', 'Periodo:', 'Período:', 'Depto.:', 'Depto:',
+    'Cargo:', 'Matricula:', 'Matrícula:', 'CTPS:', 'Admissão:', 'Admissao:', 'CPF:'
+];
+
 export function loadConfig(): SmartSplitConfig {
     try {
         const saved = localStorage.getItem(CONFIG_KEY);
@@ -46,9 +58,6 @@ export function saveConfig(config: SmartSplitConfig) {
     localStorage.setItem(CONFIG_KEY, JSON.stringify(config));
 }
 
-/**
- * Extrai texto de todas as páginas de forma bruta.
- */
 async function extractRawPagesText(pdfBytes: Uint8Array): Promise<string[]> {
     const doc = await pdfjsLib.getDocument({ data: pdfBytes }).promise;
     const pages: string[] = [];
@@ -61,9 +70,6 @@ async function extractRawPagesText(pdfBytes: Uint8Array): Promise<string[]> {
     return pages;
 }
 
-/**
- * Normaliza o texto para busca (remove acentos, espaços extras, caixa alta).
- */
 function normalizarParaBusca(texto: string): string {
     return texto
         .normalize('NFD')
@@ -73,117 +79,93 @@ function normalizarParaBusca(texto: string): string {
         .trim();
 }
 
-/**
- * Escapa caracteres especiais para regex.
- */
 function escaparParaRegex(str: string): string {
     return str.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 }
 
 /**
- * Extrai um campo baseado em um rótulo de forma robusta.
- * Pega um bloco de texto após o rótulo e corta no próximo rótulo provável.
+ * Estratégia baseada em posição:
+ * 1. Mapeia todas as ocorrências de todos os rótulos conhecidos no texto.
+ * 2. O valor de um rótulo é o texto entre ele e o próximo rótulo da lista.
  */
-function extrairComRotulo(texto: string, rotulo: string, outrosRotulos: string[]): string {
-    const rotNorm = normalizarParaBusca(rotulo);
-    const rotEsc = escaparParaRegex(rotNorm).replace(':', '[:]?');
+function extrairCamposPorPosicao(texto: string, config: SmartSplitConfig): { nome: string, depto: string, periodo: string } {
+    const textoNorm = normalizarParaBusca(texto);
 
-    // Procura a posição do rótulo
-    const regexRot = new RegExp(rotEsc, 'i');
-    const matchRot = texto.match(regexRot);
-    if (!matchRot || matchRot.index === undefined) return '';
+    // Lista de todos os rótulos a monitorar (configurados + genéricos)
+    const todosLabels = Array.from(new Set([
+        ...LABELS_DELIMITADORES,
+        config.rotuloNome,
+        config.rotuloDepto,
+        config.rotuloPeriodo
+    ])).map(l => normalizarParaBusca(l));
 
-    // Pega os 120 caracteres após o rótulo
-    let bloco = texto.substring(matchRot.index + matchRot[0].length).trim();
-    if (bloco.length > 120) bloco = bloco.substring(0, 120);
-
-    // Remove código inicial se houver (ex: "000150 - ")
-    bloco = bloco.replace(/^\d+\s*-\s*/, '').trim();
-
-    // Identifica onde parar: próximo rótulo provável (Palavra: ) ou uma data
-    // Vamos usar os outros rótulos da config como delimitadores fortes
-    const delimitadores = outrosRotulos.map(r => normalizarParaBusca(r).replace(':', ''));
-
-    // Procura a primeira ocorrência de qualquer delimitador ou de "PALAVRA:"
-    let indexCorte = bloco.length;
-
-    // Próximo rótulo genérico (Palavra de 3-15 letras seguida de dois pontos)
-    const nextLabelMatch = bloco.match(/\s+[A-Z]{3,15}\s*[:]/);
-    if (nextLabelMatch && nextLabelMatch.index !== undefined) {
-        indexCorte = Math.min(indexCorte, nextLabelMatch.index);
-    }
-
-    // Datas MM/YYYY também são delimitadores
-    const dateMatch = bloco.match(/\d{2}[/.-]\d{4}/);
-    if (dateMatch && dateMatch.index !== undefined) {
-        indexCorte = Math.min(indexCorte, dateMatch.index);
-    }
-
-    // Delimitadores específicos da config
-    delimitadores.forEach(d => {
-        const dEsc = escaparParaRegex(d);
-        const dMatch = bloco.match(new RegExp('\\s+' + dEsc, 'i'));
-        if (dMatch && dMatch.index !== undefined) {
-            indexCorte = Math.min(indexCorte, dMatch.index);
+    // Encontra todas as posições [posicao, tamanho_label, label_norm]
+    const ocorrencias: { pos: number, len: number, label: string }[] = [];
+    todosLabels.forEach(label => {
+        // Regex para encontrar o label (com : opcional se for o caso)
+        const lEsc = escaparParaRegex(label).replace(':', '[:]?');
+        const regex = new RegExp(lEsc, 'gi');
+        let m;
+        while ((m = regex.exec(textoNorm)) !== null) {
+            ocorrencias.push({ pos: m.index, len: m[0].length, label });
         }
     });
 
-    return bloco.substring(0, indexCorte).trim();
-}
+    // Ordena por posição no texto
+    ocorrencias.sort((a, b) => a.pos - b.pos);
 
-/**
- * Extrai o período (MM/YYYY) e converte para YYYYMM.
- * Filtra apenas datas que parecem ser competências válidas (mes 01-12, ano 2000-2099).
- */
-function extrairPeriodoRobusto(texto: string, rotulo: string): string {
-    const rotNorm = normalizarParaBusca(rotulo);
-    const rotEsc = escaparParaRegex(rotNorm).replace(':', '[:]?');
+    const obterValor = (labelAlvo: string): string => {
+        const targetNorm = normalizarParaBusca(labelAlvo);
+        const idx = ocorrencias.findIndex(o => o.label === targetNorm);
+        if (idx === -1) return '';
 
-    // Tenta primeiro com o rótulo
-    const regexComRotulo = new RegExp(rotEsc + '\\s*(0[1-9]|1[0-2])\\s*[/.-]\\s*(20\\d{2})', 'i');
-    const match = texto.match(regexComRotulo);
-    if (match) return `${match[2]}${match[1]}`;
+        const start = ocorrencias[idx].pos + ocorrencias[idx].len;
+        // O fim é a posição da próxima ocorrência, ou o fim do texto
+        const end = (idx + 1 < ocorrencias.length) ? ocorrencias[idx + 1].pos : textoNorm.length;
 
-    // Fallback: Procura qualquer data MM/YYYY válida no texto
-    const regexGlobal = /(0[1-9]|1[0-2])[/.-](20\d{2})/g;
-    let m;
-    while ((m = regexGlobal.exec(texto)) !== null) {
-        return `${m[2]}${m[1]}`;
+        let val = textoNorm.substring(start, end).trim();
+
+        // Limpeza básica: remove código inicial (ex: "001 - ")
+        val = val.replace(/^\d+\s*[-]\s*/, '').trim();
+
+        return val;
+    };
+
+    const nome = obterValor(config.rotuloNome);
+    const depto = obterValor(config.rotuloDepto);
+
+    // Período específico
+    let periodoRaw = obterValor(config.rotuloPeriodo);
+    // Validação de MM/YYYY no período extraído
+    const matchData = periodoRaw.match(/(0[1-9]|1[0-2])[/.-](20\d{2})/);
+    let periodo = matchData ? `${matchData[2]}${matchData[1]}` : '';
+
+    // Fallback de período se não encontrou pelo rótulo ou se ficou vazio
+    if (!periodo) {
+        const regexFallback = /(0[1-9]|1[0-2])[/.-](20\d{2})/g;
+        let m;
+        while ((m = regexFallback.exec(textoNorm)) !== null) {
+            periodo = `${m[2]}${m[1]}`;
+            break; // Pega a primeira data válida
+        }
     }
 
-    return '';
+    return { nome, depto, periodo };
 }
 
-/**
- * Mapeamento de abreviações de departamentos.
- */
-const DEPT_MAPPING: Record<string, string> = {
-    'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
-};
+export function abreviarNome(nome: string): string {
+    if (!nome) return '';
+    const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
+    const partes = nome.trim().split(/\s+/).filter(part => part.length > 2 && !preposicoes.has(part.toUpperCase()));
+    if (partes.length <= 2) return partes.join(' ');
+    return `${partes[0]} ${partes[partes.length - 1]}`;
+}
 
-/**
- * Abrevia o departamento se houver um mapeamento conhecido.
- */
 function abreviarDepto(depto: string): string {
     const d = depto.trim().toUpperCase();
     return DEPT_MAPPING[d] || depto;
 }
 
-/**
- * Abrevia o nome para Primeiro + Último.
- */
-export function abreviarNome(nome: string): string {
-    if (!nome) return '';
-    const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
-    const partes = nome.trim().split(/\s+/).filter(part => part.length > 2 && !preposicoes.has(part.toUpperCase()));
-    if (partes.length === 0) return nome;
-    if (partes.length === 1) return partes[0];
-    return `${partes[0]} ${partes[partes.length - 1]}`;
-}
-
-/**
- * Limpa string para ser usada em nome de arquivo.
- */
 export function limparParaArquivo(str: string): string {
     return str
         .normalize('NFD')
@@ -193,32 +175,21 @@ export function limparParaArquivo(str: string): string {
         .toUpperCase();
 }
 
-/**
- * Preview do processamento inteligente.
- */
 export async function previewSmartSplit(
     pdfBytes: Uint8Array,
     config: SmartSplitConfig
 ): Promise<SmartSplitResult[]> {
     const rawPages = await extractRawPagesText(pdfBytes);
-    const codigosCampos = [config.rotuloNome, config.rotuloDepto, config.rotuloPeriodo];
 
     return rawPages.map((rawText, idx) => {
-        const texto = normalizarParaBusca(rawText);
+        const { nome, depto, periodo } = extrairCamposPorPosicao(rawText, config);
 
-        const nomeRaw = extrairComRotulo(texto, config.rotuloNome, codigosCampos);
-        const deptoRaw = extrairComRotulo(texto, config.rotuloDepto, codigosCampos);
-        const periodoRaw = extrairPeriodoRobusto(texto, config.rotuloPeriodo);
-
-        const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
+        const nomeAbrev = nome ? abreviarNome(nome) : '';
         const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
 
-        const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw) : '';
+        const deptoAbrev = depto ? abreviarDepto(depto) : '';
         const deptoFinal = deptoAbrev ? limparParaArquivo(deptoAbrev) : '';
 
-        const periodo = periodoRaw || '';
-
-        // Só considera como "encontrado" se tiver o nome e o período
         const encontrado = !!(nomeFinal && periodo);
 
         const nomeArquivo = [
@@ -234,9 +205,9 @@ export async function previewSmartSplit(
         return {
             nomeArquivo,
             pagina: idx + 1,
-            nomeColaborador: nomeRaw || '',
-            periodo: periodoRaw || '',
-            depto: deptoRaw || '',
+            nomeColaborador: nome || '',
+            periodo: periodo || '',
+            depto: depto || '',
             encontrado
         };
     });
