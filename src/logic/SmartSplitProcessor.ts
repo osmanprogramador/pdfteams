@@ -116,19 +116,30 @@ function extrairCamposPorPosicao(texto: string, config: SmartSplitConfig): { nom
 
     const obterValor = (labelAlvo: string): string => {
         const targetNorm = normalizarParaBusca(labelAlvo);
-        const idx = ocorrencias.findIndex(o => o.label === targetNorm);
-        if (idx === -1) return '';
+        const alvoOcorrencias = ocorrencias
+            .map((o, i) => o.label === targetNorm ? i : -1)
+            .filter(i => i !== -1);
 
-        const start = ocorrencias[idx].pos + ocorrencias[idx].len;
-        // O fim é a posição da próxima ocorrência, ou o fim do texto
-        const end = (idx + 1 < ocorrencias.length) ? ocorrencias[idx + 1].pos : textoNorm.length;
+        for (const idx of alvoOcorrencias) {
+            const start = ocorrencias[idx].pos + ocorrencias[idx].len;
+            // O fim é a posição da próxima ocorrência, ou o fim do texto
+            const end = (idx + 1 < ocorrencias.length) ? ocorrencias[idx + 1].pos : textoNorm.length;
 
-        let val = textoNorm.substring(start, end).trim();
+            let val = textoNorm.substring(start, end).trim();
 
-        // Limpeza básica: remove código inicial (ex: "001 - ")
-        val = val.replace(/^\d+\s*[-]\s*/, '').trim();
+            // Limpeza básica: remove código inicial (ex: "001 - ")
+            val = val.replace(/^\d+\s*[-]\s*/, '').trim();
 
-        return val;
+            // Se o valor extraído for vazio ou for apenas outro label conhecido, ignora esta ocorrência
+            const valNorm = normalizarParaBusca(val);
+            const ehLabel = todosLabels.some(l => valNorm === l || valNorm.startsWith(l));
+
+            if (val && !ehLabel) {
+                return val;
+            }
+        }
+
+        return '';
     };
 
     const nome = obterValor(config.rotuloNome);
