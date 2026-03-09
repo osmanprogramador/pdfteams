@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useRef } from 'react';
+import React, { useState, useCallback, useRef, useEffect } from 'react';
 import {
   FluentProvider,
   webDarkTheme,
@@ -9,6 +9,14 @@ import {
   Tooltip,
 } from '@fluentui/react-components';
 import { splitPdf, getPdfPageCount } from './logic/PdfProcessor';
+import {
+  SmartSplitConfig,
+  SmartSplitResult,
+  defaultConfig,
+  loadConfig,
+  saveConfig,
+  previewSmartSplit,
+} from './logic/SmartSplitProcessor';
 import './App.css';
 
 interface PageRange {
@@ -16,6 +24,8 @@ interface PageRange {
   end: number;
   id: string;
 }
+
+type AppMode = 'manual' | 'smart';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -26,7 +36,15 @@ const App: React.FC = () => {
   const [error, setError] = useState<string | null>(null);
   const [success, setSuccess] = useState<string | null>(null);
   const [loadingFile, setLoadingFile] = useState(false);
+  const [appMode, setAppMode] = useState<AppMode>('manual');
+  const [smartConfig, setSmartConfig] = useState<SmartSplitConfig>(loadConfig());
+  const [smartPreview, setSmartPreview] = useState<SmartSplitResult[] | null>(null);
+  const [loadingPreview, setLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    saveConfig(smartConfig);
+  }, [smartConfig]);
 
   const processFile = async (selectedFile: File) => {
     if (selectedFile.type !== 'application/pdf') {
@@ -37,6 +55,7 @@ const App: React.FC = () => {
       setLoadingFile(true);
       setError(null);
       setSuccess(null);
+      setSmartPreview(null);
       setFile(selectedFile);
       const arrayBuffer = await selectedFile.arrayBuffer();
       const count = await getPdfPageCount(new Uint8Array(arrayBuffer));
@@ -69,13 +88,13 @@ const App: React.FC = () => {
 
   const handleDragLeave = () => setIsDragging(false);
 
+  /* ──────── Manual split helpers ──────── */
   const addRange = () => {
     const lastRange = ranges[ranges.length - 1];
     const newStart = lastRange ? Math.min(lastRange.end + 1, pageCount) : 1;
     setRanges([...ranges, { start: newStart, end: pageCount, id: Date.now().toString() }]);
   };
 
-  // Cria um intervalo individual para cada página do PDF
   const splitAllPages = () => {
     const allRanges: PageRange[] = [];
     for (let i = 1; i <= pageCount; i++) {
@@ -126,12 +145,71 @@ const App: React.FC = () => {
     }
   };
 
+  /* ──────── Smart split helpers ──────── */
+  const handleGeneratePreview = async () => {
+    if (!file) return;
+    setLoadingPreview(true);
+    setError(null);
+    setSmartPreview(null);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfBytes = new Uint8Array(arrayBuffer);
+      const preview = await previewSmartSplit(pdfBytes, smartConfig);
+      setSmartPreview(preview);
+    } catch (e) {
+      setError('Erro ao extrair texto do PDF. Verifique se o arquivo tem camada de texto.');
+      console.error(e);
+    } finally {
+      setLoadingPreview(false);
+    }
+  };
+
+  const handleSmartSplit = async () => {
+    if (!file || !smartPreview) return;
+    setIsProcessing(true);
+    setError(null);
+    setSuccess(null);
+    try {
+      const arrayBuffer = await file.arrayBuffer();
+      const pdfBytes = new Uint8Array(arrayBuffer);
+      // Split each page individually
+      const pageRanges: PageRange[] = smartPreview.map((_, i) => ({
+        start: i + 1,
+        end: i + 1,
+        id: (Date.now() + i).toString(),
+      }));
+      const results = await splitPdf(pdfBytes, pageRanges);
+      results.forEach((bytes, index) => {
+        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
+        const url = URL.createObjectURL(blob);
+        const a = document.createElement('a');
+        a.href = url;
+        a.download = smartPreview[index].nomeArquivo;
+        document.body.appendChild(a);
+        a.click();
+        document.body.removeChild(a);
+        URL.revokeObjectURL(url);
+      });
+      setSuccess(`${results.length} arquivo(s) baixado(s) com nomes automáticos!`);
+    } catch {
+      setError('Erro ao processar o PDF.');
+    } finally {
+      setIsProcessing(false);
+    }
+  };
+
+  const updateConfig = (field: keyof SmartSplitConfig, value: string) => {
+    setSmartConfig(prev => ({ ...prev, [field]: value }));
+    setSmartPreview(null); // invalidate preview when config changes
+  };
+
   const resetApp = () => {
     setFile(null);
     setPageCount(0);
     setRanges([]);
     setError(null);
     setSuccess(null);
+    setSmartPreview(null);
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -213,8 +291,8 @@ const App: React.FC = () => {
                   <div className="drop-zone-content">
                     <div className="drop-icon">
                       <svg width="64" height="64" viewBox="0 0 64 64" fill="none">
-                        <circle cx="32" cy="32" r="32" fill="rgba(98,100,167,0.15)" />
-                        <path d="M22 42h20M32 22v20M32 22l-6 6M32 22l6 6" stroke="#6264A7" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
+                        <circle cx="32" cy="32" r="32" fill="rgba(175,217,245,0.1)" />
+                        <path d="M22 42h20M32 22v20M32 22l-6 6M32 22l6 6" stroke="#AFD9F5" strokeWidth="2.5" strokeLinecap="round" strokeLinejoin="round" />
                       </svg>
                     </div>
                     <Text size={500} weight="semibold" className="drop-title">
@@ -224,19 +302,18 @@ const App: React.FC = () => {
                       ou clique para selecionar um arquivo
                     </Text>
                     <div className="drop-hint">
-                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#6264A7"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
+                      <svg width="14" height="14" viewBox="0 0 24 24" fill="#AFD9F5"><path d="M12 2a10 10 0 1 0 0 20A10 10 0 0 0 12 2zm1 15h-2v-6h2v6zm0-8h-2V7h2v2z" /></svg>
                       <Text size={200}>Processamento 100% local — seus dados nunca saem do dispositivo</Text>
                     </div>
                   </div>
                 )}
               </div>
             ) : (
-              /* File loaded state */
               <div className="workspace">
                 {/* File info strip */}
                 <div className="file-strip">
                   <div className="file-icon">
-                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#6264A7">
+                    <svg width="24" height="24" viewBox="0 0 24 24" fill="#AFD9F5">
                       <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zM14 2v6h6" />
                     </svg>
                   </div>
@@ -248,99 +325,255 @@ const App: React.FC = () => {
                   </div>
                 </div>
 
-                {/* Ranges section */}
-                <div className="ranges-panel">
-                  <div className="ranges-header">
-                    <div>
-                      <Text weight="semibold" size={400} block>Definir partes do PDF</Text>
-                      <Text size={200} className="muted">Cada intervalo gerará um arquivo separado para download</Text>
-                    </div>
-                    <div className="ranges-header-actions">
-                      <button className="split-all-btn" onClick={splitAllPages} title={`Criar ${pageCount} intervalos, um por página`}>
-                        ⚡ Página por página
-                      </button>
-                      <button className="add-btn" onClick={addRange}>
-                        + Adicionar intervalo
-                      </button>
-                    </div>
-                  </div>
+                {/* Mode Toggle */}
+                <div className="mode-toggle">
+                  <button
+                    className={`mode-btn ${appMode === 'manual' ? 'active' : ''}`}
+                    onClick={() => setAppMode('manual')}
+                  >
+                    ✂️ Manual
+                  </button>
+                  <button
+                    className={`mode-btn ${appMode === 'smart' ? 'active' : ''}`}
+                    onClick={() => setAppMode('smart')}
+                  >
+                    ⚡ Inteligente
+                  </button>
+                </div>
 
-                  <div className="ranges-list">
-                    {ranges.map((range, index) => {
-                      const pagesInRange = range.end - range.start + 1;
-                      return (
-                        <div key={range.id} className="range-card">
-                          <div className="range-number">{index + 1}</div>
-                          <div className="range-body">
-                            <Text size={300} weight="semibold" className="range-label">
-                              Parte {index + 1}
-                            </Text>
-                            <div className="range-controls">
-                              <label className="input-group">
-                                <span>Da página</span>
-                                <input
-                                  type="number"
-                                  className="page-input"
-                                  value={range.start}
-                                  min={1}
-                                  max={pageCount}
-                                  onChange={e => updateRange(range.id, 'start', e.target.value)}
-                                />
-                              </label>
-                              <span className="range-sep">→</span>
-                              <label className="input-group">
-                                <span>Até página</span>
-                                <input
-                                  type="number"
-                                  className="page-input"
-                                  value={range.end}
-                                  min={1}
-                                  max={pageCount}
-                                  onChange={e => updateRange(range.id, 'end', e.target.value)}
-                                />
-                              </label>
+                {/* ═══ MANUAL MODE ═══ */}
+                {appMode === 'manual' && (
+                  <div className="ranges-panel">
+                    <div className="ranges-header">
+                      <div>
+                        <Text weight="semibold" size={400} block>Definir partes do PDF</Text>
+                        <Text size={200} className="muted">Cada intervalo gerará um arquivo separado para download</Text>
+                      </div>
+                      <div className="ranges-header-actions">
+                        <button className="split-all-btn" onClick={splitAllPages} title={`Criar ${pageCount} intervalos, um por página`}>
+                          ⚡ Página por página
+                        </button>
+                        <button className="add-btn" onClick={addRange}>
+                          + Adicionar intervalo
+                        </button>
+                      </div>
+                    </div>
+
+                    <div className="ranges-list">
+                      {ranges.map((range, index) => {
+                        const pagesInRange = range.end - range.start + 1;
+                        return (
+                          <div key={range.id} className="range-card">
+                            <div className="range-number">{index + 1}</div>
+                            <div className="range-body">
+                              <Text size={300} weight="semibold" className="range-label">
+                                Parte {index + 1}
+                              </Text>
+                              <div className="range-controls">
+                                <label className="input-group">
+                                  <span>Da página</span>
+                                  <input
+                                    type="number"
+                                    className="page-input"
+                                    value={range.start}
+                                    min={1}
+                                    max={pageCount}
+                                    onChange={e => updateRange(range.id, 'start', e.target.value)}
+                                  />
+                                </label>
+                                <span className="range-sep">→</span>
+                                <label className="input-group">
+                                  <span>Até página</span>
+                                  <input
+                                    type="number"
+                                    className="page-input"
+                                    value={range.end}
+                                    min={1}
+                                    max={pageCount}
+                                    onChange={e => updateRange(range.id, 'end', e.target.value)}
+                                  />
+                                </label>
+                              </div>
+                            </div>
+                            <div className="range-meta">
+                              <Badge appearance="filled" color="informative" size="small">
+                                {pagesInRange} pág.
+                              </Badge>
+                              <button
+                                className="remove-btn"
+                                onClick={() => removeRange(range.id)}
+                                disabled={ranges.length === 1}
+                                title="Remover intervalo"
+                              >
+                                ✕
+                              </button>
                             </div>
                           </div>
-                          <div className="range-meta">
-                            <Badge appearance="filled" color="informative" size="small">
-                              {pagesInRange} pág.
-                            </Badge>
+                        );
+                      })}
+                    </div>
+
+                    <div className="summary-bar">
+                      <Text size={300} className="muted">
+                        {ranges.length} arquivo(s) · {totalPages} páginas selecionadas de {pageCount}
+                      </Text>
+                      <Button
+                        appearance="primary"
+                        size="large"
+                        disabled={!file || isProcessing}
+                        onClick={handleSplit}
+                      >
+                        {isProcessing ? (
+                          <><Spinner size="tiny" />&nbsp;Processando...</>
+                        ) : (
+                          `⬇ Dividir e Baixar (${ranges.length} arquivo${ranges.length > 1 ? 's' : ''})`
+                        )}
+                      </Button>
+                    </div>
+                  </div>
+                )}
+
+                {/* ═══ SMART MODE ═══ */}
+                {appMode === 'smart' && (
+                  <div className="smart-panel">
+                    {/* Config section */}
+                    <div className="smart-config">
+                      <Text weight="semibold" size={400} block>Configuração de Nomenclatura</Text>
+                      <Text size={200} className="muted" block>
+                        Nome gerado: <span className="filename-preview">
+                          {[
+                            smartConfig.empresa,
+                            smartConfig.subId,
+                            smartConfig.equipe,
+                            smartConfig.tipoDoc,
+                            'NOME_COLABORADOR',
+                          ].filter(Boolean).join('_')}.pdf
+                        </span>
+                      </Text>
+
+                      <div className="config-grid">
+                        <div className="config-section">
+                          <Text size={300} weight="semibold" block className="config-section-title">
+                            Prefixos fixos (configuráveis)
+                          </Text>
+                          <div className="config-fields">
+                            {([
+                              { field: 'empresa', label: 'Empresa', placeholder: 'AEDAS' },
+                              { field: 'subId', label: 'Sub-ID / Obra', placeholder: 'MRD_ITU_RESP' },
+                              { field: 'equipe', label: 'Equipe / Depto', placeholder: 'ADM' },
+                              { field: 'tipoDoc', label: 'Tipo de Documento', placeholder: 'DEMONSTRATIVOS' },
+                            ] as { field: keyof SmartSplitConfig; label: string; placeholder: string }[]).map(({ field, label, placeholder }) => (
+                              <label key={field} className="config-field">
+                                <span className="config-label">{label}</span>
+                                <input
+                                  type="text"
+                                  className="config-input"
+                                  value={smartConfig[field]}
+                                  placeholder={placeholder}
+                                  onChange={e => updateConfig(field, e.target.value)}
+                                />
+                              </label>
+                            ))}
+                          </div>
+                        </div>
+
+                        <div className="config-section">
+                          <Text size={300} weight="semibold" block className="config-section-title">
+                            Rótulos extraídos do PDF
+                          </Text>
+                          <div className="config-fields">
+                            <label className="config-field">
+                              <span className="config-label">Rótulo do nome</span>
+                              <input
+                                type="text"
+                                className="config-input"
+                                value={smartConfig.rotuloNome}
+                                placeholder="Func.:"
+                                onChange={e => updateConfig('rotuloNome', e.target.value)}
+                              />
+                            </label>
+                            <label className="config-field">
+                              <span className="config-label">Rótulo do período</span>
+                              <input
+                                type="text"
+                                className="config-input"
+                                value={smartConfig.rotuloPeriodo}
+                                placeholder="Período:"
+                                onChange={e => updateConfig('rotuloPeriodo', e.target.value)}
+                              />
+                            </label>
                             <button
-                              className="remove-btn"
-                              onClick={() => removeRange(range.id)}
-                              disabled={ranges.length === 1}
-                              title="Remover intervalo"
+                              className="reset-config-btn"
+                              onClick={() => { setSmartConfig({ ...defaultConfig }); setSmartPreview(null); }}
                             >
-                              ✕
+                              ↺ Restaurar padrões
                             </button>
                           </div>
                         </div>
-                      );
-                    })}
-                  </div>
+                      </div>
 
-                  {/* Summary bar */}
-                  <div className="summary-bar">
-                    <Text size={300} className="muted">
-                      {ranges.length} arquivo(s) · {totalPages} páginas selecionadas de {pageCount}
-                    </Text>
-                    <Button
-                      appearance="primary"
-                      size="large"
-                      disabled={!file || isProcessing}
-                      onClick={handleSplit}
-                    >
-                      {isProcessing ? (
-                        <>
-                          <Spinner size="tiny" />
-                          &nbsp;Processando...
-                        </>
-                      ) : (
-                        `⬇ Dividir e Baixar (${ranges.length} arquivo${ranges.length > 1 ? 's' : ''})`
-                      )}
-                    </Button>
+                      <button
+                        className="preview-btn"
+                        onClick={handleGeneratePreview}
+                        disabled={loadingPreview}
+                      >
+                        {loadingPreview ? '⏳ Analisando PDF...' : '🔍 Analisar e Pré-visualizar nomes'}
+                      </button>
+                    </div>
+
+                    {/* Preview table */}
+                    {smartPreview && (
+                      <div className="preview-panel">
+                        <div className="preview-header">
+                          <Text weight="semibold" size={400} block>Pré-visualização — {smartPreview.length} página(s)</Text>
+                          <Text size={200} className="muted" block>
+                            {smartPreview.filter(r => r.encontrado).length} de {smartPreview.length} com dados identificados
+                          </Text>
+                        </div>
+                        <div className="preview-table-wrap">
+                          <table className="preview-table">
+                            <thead>
+                              <tr>
+                                <th>Pág.</th>
+                                <th>Colaborador</th>
+                                <th>Período</th>
+                                <th>Nome do arquivo</th>
+                              </tr>
+                            </thead>
+                            <tbody>
+                              {smartPreview.map(row => (
+                                <tr key={row.pagina} className={row.encontrado ? '' : 'row-warning'}>
+                                  <td>{row.pagina}</td>
+                                  <td>{row.nomeColaborador || <span className="not-found">Não encontrado</span>}</td>
+                                  <td>{row.periodo || <span className="not-found">—</span>}</td>
+                                  <td className="filename-cell">{row.nomeArquivo}</td>
+                                </tr>
+                              ))}
+                            </tbody>
+                          </table>
+                        </div>
+
+                        <div className="summary-bar">
+                          <Text size={300} className="muted">
+                            {smartPreview.length} arquivo(s) serão gerados
+                          </Text>
+                          <Button
+                            appearance="primary"
+                            size="large"
+                            disabled={isProcessing}
+                            onClick={handleSmartSplit}
+                          >
+                            {isProcessing ? (
+                              <><Spinner size="tiny" />&nbsp;Processando...</>
+                            ) : (
+                              `⬇ Separar e Renomear (${smartPreview.length} arquivo${smartPreview.length > 1 ? 's' : ''})`
+                            )}
+                          </Button>
+                        </div>
+                      </div>
+                    )}
                   </div>
-                </div>
+                )}
               </div>
             )}
 
