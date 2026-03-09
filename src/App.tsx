@@ -364,6 +364,9 @@ const App: React.FC = () => {
             <Text size={100} className="muted">
               Separador de PDF · Processamento local · Seus arquivos nunca saem do dispositivo
             </Text>
+            <Text size={100} className="muted">
+              Desenvolvido pela GEI. Todos os direitos reservados.
+            </Text>
           </footer>
         </div>
       </div>
