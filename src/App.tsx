@@ -38,6 +38,7 @@ const App: React.FC = () => {
   const [appMode, setAppMode] = useState<AppMode>('manual');
   const [smartConfig, setSmartConfig] = useState<SmartSplitConfig>(loadConfig());
   const [smartPreview, setSmartPreview] = useState<SmartSplitResult[] | null>(null);
+  const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [loadingPreview, setLoadingPreview] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -55,6 +56,7 @@ const App: React.FC = () => {
       setError(null);
       setSuccess(null);
       setSmartPreview(null);
+      setSelectedPages(new Set());
       setFile(selectedFile);
       const arrayBuffer = await selectedFile.arrayBuffer();
       const count = await getPdfPageCount(new Uint8Array(arrayBuffer));
@@ -150,11 +152,14 @@ const App: React.FC = () => {
     setLoadingPreview(true);
     setError(null);
     setSmartPreview(null);
+    setSelectedPages(new Set());
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdfBytes = new Uint8Array(arrayBuffer);
       const preview = await previewSmartSplit(pdfBytes, smartConfig);
       setSmartPreview(preview);
+      // Initialize selectedPages with all pages
+      setSelectedPages(new Set(preview.map(p => p.pagina)));
     } catch (e) {
       setError('Erro ao extrair texto do PDF. Verifique se o arquivo tem camada de texto.');
       console.error(e);
@@ -163,27 +168,50 @@ const App: React.FC = () => {
     }
   };
 
+  const togglePageSelection = (page: number) => {
+    const nextSelection = new Set(selectedPages);
+    if (nextSelection.has(page)) {
+      nextSelection.delete(page);
+    } else {
+      nextSelection.add(page);
+    }
+    setSelectedPages(nextSelection);
+  };
+
+  const toggleAllPages = () => {
+    if (!smartPreview) return;
+    if (selectedPages.size === smartPreview.length) {
+      setSelectedPages(new Set());
+    } else {
+      setSelectedPages(new Set(smartPreview.map(p => p.pagina)));
+    }
+  };
+
   const handleSmartSplit = async () => {
-    if (!file || !smartPreview) return;
+    if (!file || !smartPreview || selectedPages.size === 0) return;
     setIsProcessing(true);
     setError(null);
     setSuccess(null);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdfBytes = new Uint8Array(arrayBuffer);
-      // Split each page individually
-      const pageRanges: PageRange[] = smartPreview.map((_, i) => ({
-        start: i + 1,
-        end: i + 1,
-        id: (Date.now() + i).toString(),
+
+      // Filter smartPreview based on selectedPages
+      const activeResults = smartPreview.filter(p => selectedPages.has(p.pagina));
+
+      const pageRanges: PageRange[] = activeResults.map((p) => ({
+        start: p.pagina,
+        end: p.pagina,
+        id: (Date.now() + p.pagina).toString(),
       }));
+
       const results = await splitPdf(pdfBytes, pageRanges);
       results.forEach((bytes, index) => {
         const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
         const url = URL.createObjectURL(blob);
         const a = document.createElement('a');
         a.href = url;
-        a.download = smartPreview[index].nomeArquivo;
+        a.download = activeResults[index].nomeArquivo;
         document.body.appendChild(a);
         a.click();
         document.body.removeChild(a);
@@ -200,6 +228,7 @@ const App: React.FC = () => {
   const updateConfig = (field: keyof SmartSplitConfig, value: string) => {
     setSmartConfig(prev => ({ ...prev, [field]: value }));
     setSmartPreview(null); // invalidate preview when config changes
+    setSelectedPages(new Set());
   };
 
   const resetApp = () => {
@@ -209,6 +238,7 @@ const App: React.FC = () => {
     setError(null);
     setSuccess(null);
     setSmartPreview(null);
+    setSelectedPages(new Set());
     if (fileInputRef.current) fileInputRef.current.value = '';
   };
 
@@ -438,18 +468,21 @@ const App: React.FC = () => {
                     {/* Config section */}
                     <div className="smart-config">
                       <Text weight="semibold" size={400} block>Configuração de Nomenclatura</Text>
-                      <Text size={200} className="muted" block>
-                        Nome gerado: <span className="filename-preview">
+                      <div className="smart-preview-filename">
+                        <Text size={200} className="muted" block>
+                          Amostra do nome gerado:
+                        </Text>
+                        <span className="filename-preview">
                           {[
                             smartConfig.empresa,
                             smartConfig.projeto,
-                            'DEPTO_DO_DOCUMENTO',
+                            'DEPTO_DOC',
                             smartConfig.equipe,
                             smartConfig.tipoDoc,
-                            'NOME_COLABORADOR',
+                            'NOME_COLAB',
                           ].filter(Boolean).join('_')}.pdf
                         </span>
-                      </Text>
+                      </div>
 
                       <div className="config-grid">
                         <div className="config-section">
@@ -535,26 +568,47 @@ const App: React.FC = () => {
                     {smartPreview && (
                       <div className="preview-panel">
                         <div className="preview-header">
-                          <Text weight="semibold" size={400} block>Pré-visualização — {smartPreview.length} página(s)</Text>
-                          <Text size={200} className="muted" block>
-                            {smartPreview.filter(r => r.encontrado).length} de {smartPreview.length} com dados identificados
-                          </Text>
+                          <div className="preview-header-info">
+                            <Text weight="semibold" size={400} block>Páginas Detectadas ({selectedPages.size} selecionadas)</Text>
+                            <Text size={200} className="muted" block>
+                              {smartPreview.filter(r => r.encontrado).length} de {smartPreview.length} com dados identificados
+                            </Text>
+                          </div>
+                          <Badge appearance="filled" color={selectedPages.size > 0 ? 'success' : 'important'}>
+                            {selectedPages.size} de {smartPreview.length} páginas
+                          </Badge>
                         </div>
                         <div className="preview-table-wrap">
                           <table className="preview-table">
                             <thead>
                               <tr>
-                                <th>Pág.</th>
+                                <th className="checkbox-col">
+                                  <input
+                                    type="checkbox"
+                                    className="custom-checkbox"
+                                    checked={selectedPages.size === smartPreview.length && smartPreview.length > 0}
+                                    onChange={toggleAllPages}
+                                  />
+                                </th>
+                                <th className="page-col">Pág.</th>
                                 <th>Colaborador</th>
                                 <th>Período</th>
                                 <th>Depto</th>
-                                <th>Nome do arquivo</th>
+                                <th>Nome do arquivo final</th>
                               </tr>
                             </thead>
                             <tbody>
                               {smartPreview.map(row => (
                                 <tr key={row.pagina} className={row.encontrado ? '' : 'row-warning'}>
-                                  <td>{row.pagina}</td>
+                                  <td className="checkbox-col">
+                                    <input
+                                      type="checkbox"
+                                      className="custom-checkbox"
+                                      checked={selectedPages.has(row.pagina)}
+                                      onChange={() => togglePageSelection(row.pagina)}
+                                    />
+                                  </td>
+                                  <td className="page-col">{row.pagina}</td>
                                   <td>{row.nomeColaborador || <span className="not-found">Não encontrado</span>}</td>
                                   <td>{row.periodo || <span className="not-found">—</span>}</td>
                                   <td>{row.depto || <span className="not-found">—</span>}</td>
@@ -567,18 +621,18 @@ const App: React.FC = () => {
 
                         <div className="summary-bar">
                           <Text size={300} className="muted">
-                            {smartPreview.length} arquivo(s) serão gerados
+                            {selectedPages.size} arquivo(s) serão gerados
                           </Text>
                           <Button
                             appearance="primary"
                             size="large"
-                            disabled={isProcessing}
+                            disabled={isProcessing || selectedPages.size === 0}
                             onClick={handleSmartSplit}
                           >
                             {isProcessing ? (
                               <><Spinner size="tiny" />&nbsp;Processando...</>
                             ) : (
-                              `⬇ Separar e Renomear (${smartPreview.length} arquivo${smartPreview.length > 1 ? 's' : ''})`
+                              `⬇ Separar e Renomear (${selectedPages.size} arquivo${selectedPages.size > 1 ? 's' : ''})`
                             )}
                           </Button>
                         </div>

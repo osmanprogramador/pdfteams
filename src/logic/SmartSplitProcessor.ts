@@ -81,9 +81,10 @@ function escaparRotulo(rotulo: string): string {
  */
 function extrairCampoComCodigo(texto: string, rotulo: string): string {
     const rotuloEsc = escaparRotulo(rotulo);
-    // CÓDIGO (4-6 dígitos) + DASH + VALOR (para antes do próximo label "PALAVRA:" ou data)
+    // CÓDIGO (4-7 dígitos) + DASH + VALOR (para antes do próximo label "PALAVRA:" ou data ou fim de linha)
+    // Regex refinada para ser mais permissiva com o conteúdo mas parar em delimitadores conhecidos
     const regex = new RegExp(
-        rotuloEsc + '\\s*\\d{4,6}\\s*-\\s*([A-ZÁÀÂÃÉÊÍÓÔÕÚÜÇ][^\\d:]{2,60}?)(?=\\s*\\S+\\s*[.:,]|\\d{2}\\s*[/\\-]|$)',
+        rotuloEsc + '\\s*\\d{4,7}\\s*-\\s*([A-Za-zÁÀÂÃÉÊÍÓÔÕÚÜÇáàâãéêíóôõúüç][^\\d:]{2,60}?)(?=\\s*\\S+\\s*[.:,]|\\d{2}\\s*[/\\-]|$)',
         'i'
     );
     const match = texto.match(regex);
@@ -101,27 +102,25 @@ function extrairPeriodo(texto: string, rotulo: string): string {
     const regex = new RegExp(rotuloEsc + '\\s*(\\d{2})\\s*[/\\-]\\s*(\\d{4})', 'i');
     const match = texto.match(regex);
     if (match) return `${match[2]}${match[1]}`; // AAAA + MM = AAAAMM
-
-
     return '';
 }
 
 /**
  * Abrevia o nome para PRIMEIRO + ÚLTIMO nome, filtrando preposições.
  * Ex: "FERNANDA ALVES DE OLIVEIRA" → "FERNANDA OLIVEIRA"
- * Ex: "JOSE CARLOS" → "JOSE CARLOS" (mantém, já é curto)
  */
-function abreviarNome(nome: string): string {
+export function abreviarNome(nome: string): string {
     const preposicoes = new Set(['DE', 'DA', 'DO', 'DOS', 'DAS', 'E', 'EM', 'DI']);
     const partes = nome.trim().split(/\s+/).filter(p => !preposicoes.has(p.toUpperCase()));
     if (partes.length <= 2) return partes.join(' ');
+    // Retorna primeiro e último
     return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
 /**
  * Normaliza string para nome de arquivo: remove acentos, espaços → _
  */
-function normalizar(texto: string): string {
+export function normalizar(texto: string): string {
     return texto
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
@@ -130,6 +129,9 @@ function normalizar(texto: string): string {
         .toUpperCase();
 }
 
+/**
+ * Gera preview dos nomes que serão gerados antes do download.
+ */
 export async function previewSmartSplit(
     pdfBytes: Uint8Array,
     config: SmartSplitConfig

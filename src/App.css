@@ -604,18 +604,20 @@ body {
 ::-webkit-scrollbar-thumb:hover {
   background: rgba(255, 255, 255, 0.2);
 }
+
 /* ============================================================
    MODE TOGGLE
    ============================================================ */
 .mode-toggle {
   display: flex;
   gap: 4px;
-  background: rgba(255,255,255,0.04);
+  background: rgba(255, 255, 255, 0.04);
   border: 1px solid var(--border);
   border-radius: 10px;
   padding: 4px;
   width: fit-content;
 }
+
 .mode-btn {
   padding: 8px 20px;
   border-radius: 7px;
@@ -627,20 +629,26 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
+
 .mode-btn.active {
   background: #1B284E;
   color: var(--brand-hover);
-  box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+  box-shadow: 0 2px 8px rgba(0, 0, 0, 0.3);
 }
+
 .mode-btn:hover:not(.active) {
   color: var(--text-primary);
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
 }
 
 /* ============================================================
    SMART PANEL
    ============================================================ */
-.smart-panel { display: flex; flex-direction: column; gap: 20px; }
+.smart-panel {
+  display: flex;
+  flex-direction: column;
+  gap: 20px;
+}
 
 .smart-config {
   background: var(--bg-card);
@@ -657,14 +665,24 @@ body {
   font-family: 'Courier New', monospace;
   font-size: 11px;
   color: var(--brand-hover);
-  background: rgba(175,217,245,0.08);
+  background: rgba(175, 217, 245, 0.08);
   padding: 2px 8px;
   border-radius: 4px;
   word-break: break-all;
 }
 
-.config-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 20px; }
-.config-section { display: flex; flex-direction: column; gap: 12px; }
+.config-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 20px;
+}
+
+.config-section {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
 .config-section-title {
   color: var(--text-secondary) !important;
   font-size: 12px !important;
@@ -673,24 +691,41 @@ body {
   padding-bottom: 6px;
   border-bottom: 1px solid var(--border);
 }
-.config-fields { display: flex; flex-direction: column; gap: 10px; }
-.config-field { display: flex; flex-direction: column; gap: 4px; }
-.config-label { font-size: 12px; color: var(--text-secondary); }
+
+.config-fields {
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+}
+
+.config-field {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.config-label {
+  font-size: 12px;
+  color: var(--text-secondary);
+}
+
 .config-input {
   padding: 8px 12px;
   border-radius: 8px;
   border: 1px solid var(--border);
-  background: rgba(255,255,255,0.05);
+  background: rgba(255, 255, 255, 0.05);
   color: var(--text-primary);
   font-size: 13px;
   outline: none;
   transition: all 0.2s;
 }
+
 .config-input:focus {
   border-color: var(--brand-hover);
   box-shadow: 0 0 0 2px var(--brand-glow);
-  background: rgba(255,255,255,0.08);
+  background: rgba(255, 255, 255, 0.08);
 }
+
 .reset-config-btn {
   background: transparent;
   border: 1px solid var(--border);
@@ -701,11 +736,15 @@ body {
   cursor: pointer;
   transition: all 0.2s;
 }
-.reset-config-btn:hover { color: var(--text-primary); border-color: rgba(255,255,255,0.2); }
+
+.reset-config-btn:hover {
+  color: var(--text-primary);
+  border-color: rgba(255, 255, 255, 0.2);
+}
 
 .preview-btn {
-  background: rgba(175,217,245,0.1);
-  border: 1px solid rgba(175,217,245,0.3);
+  background: rgba(175, 217, 245, 0.1);
+  border: 1px solid rgba(175, 217, 245, 0.3);
   border-radius: 10px;
   color: var(--brand-hover);
   font-size: 14px;
@@ -715,8 +754,16 @@ body {
   transition: all 0.2s;
   width: 100%;
 }
-.preview-btn:hover:not(:disabled) { background: rgba(175,217,245,0.18); border-color: var(--brand-hover); }
-.preview-btn:disabled { opacity: 0.6; cursor: not-allowed; }
+
+.preview-btn:hover:not(:disabled) {
+  background: rgba(175, 217, 245, 0.18);
+  border-color: var(--brand-hover);
+}
+
+.preview-btn:disabled {
+  opacity: 0.6;
+  cursor: not-allowed;
+}
 
 /* ============================================================
    PREVIEW TABLE
@@ -731,11 +778,27 @@ body {
   gap: 16px;
   animation: slideIn 0.3s ease both;
 }
-.preview-header { display: flex; flex-direction: column; gap: 4px; }
-.preview-table-wrap { overflow-x: auto; border-radius: 8px; border: 1px solid var(--border); }
-.preview-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+
+.preview-header {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+}
+
+.preview-table-wrap {
+  overflow-x: auto;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+}
+
+.preview-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 13px;
+}
+
 .preview-table th {
-  background: rgba(27,40,78,0.8);
+  background: rgba(27, 40, 78, 0.8);
   color: var(--brand-hover);
   font-weight: 600;
   font-size: 11px;
@@ -745,9 +808,88 @@ body {
   text-align: left;
   border-bottom: 1px solid var(--border);
 }
-.preview-table td { padding: 10px 14px; border-bottom: 1px solid rgba(255,255,255,0.04); color: var(--text-primary); }
-.preview-table tr:last-child td { border-bottom: none; }
-.preview-table tr:hover td { background: rgba(255,255,255,0.03); }
-.preview-table tr.row-warning td { background: rgba(244,124,124,0.05); }
-.filename-cell { font-family: 'Courier New', monospace; font-size: 11px; color: var(--brand-hover); word-break: break-all; }
-.not-found { color: var(--error); font-style: italic; font-size: 12px; }
+
+.preview-table td {
+  padding: 10px 14px;
+  border-bottom: 1px solid rgba(255, 255, 255, 0.04);
+  color: var(--text-primary);
+}
+
+.preview-table tr:last-child td {
+  border-bottom: none;
+}
+
+.preview-table tr:hover td {
+  background: rgba(255, 255, 255, 0.03);
+}
+
+.preview-table tr.row-warning td {
+  background: rgba(244, 124, 124, 0.05);
+}
+
+.filename-cell {
+  font-family: 'Courier New', monospace;
+  font-size: 11px;
+  color: var(--brand-hover);
+  word-break: break-all;
+}
+
+.not-found {
+  color: var(--error);
+  font-style: italic;
+  font-size: 12px;
+}
+
+/* Selection & Refinements */
+.checkbox-col {
+  width: 44px;
+  text-align: center;
+}
+
+.page-col {
+  width: 50px;
+  text-align: center;
+  font-weight: 700;
+  color: var(--brand-hover);
+}
+
+.custom-checkbox {
+  width: 16px;
+  height: 16px;
+  cursor: pointer;
+  accent-color: #AFD9F5;
+  filter: hue-rotate(180deg);
+}
+
+.smart-preview-filename {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  background: rgba(255, 255, 255, 0.03);
+  padding: 12px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  margin-bottom: 8px;
+}
+
+.preview-header {
+  display: flex;
+  flex-direction: row;
+  align-items: center;
+  justify-content: space-between;
+  gap: 16px;
+  padding-bottom: 12px;
+  border-bottom: 1px solid var(--border);
+}
+
+.preview-header-info {
+  flex: 1;
+}
+
+.row-warning {
+  background: rgba(244, 124, 124, 0.04) !important;
+}
+
+.row-warning:hover {
+  background: rgba(244, 124, 124, 0.08) !important;
+}
