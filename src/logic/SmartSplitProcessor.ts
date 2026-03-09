@@ -155,6 +155,21 @@ function extrairPeriodoRobusto(texto: string, rotulo: string): string {
 }
 
 /**
+ * Mapeamento de abreviações de departamentos.
+ */
+const DEPT_MAPPING: Record<string, string> = {
+    'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
+};
+
+/**
+ * Abrevia o departamento se houver um mapeamento conhecido.
+ */
+function abreviarDepto(depto: string): string {
+    const d = depto.trim().toUpperCase();
+    return DEPT_MAPPING[d] || depto;
+}
+
+/**
  * Abrevia o nome para Primeiro + Último.
  */
 export function abreviarNome(nome: string): string {
@@ -197,7 +212,10 @@ export async function previewSmartSplit(
 
         const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
         const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
-        const deptoFinal = deptoRaw ? limparParaArquivo(deptoRaw) : '';
+
+        const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw) : '';
+        const deptoFinal = deptoAbrev ? limparParaArquivo(deptoAbrev) : '';
+
         const periodo = periodoRaw || '';
 
         // Só considera como "encontrado" se tiver o nome e o período
