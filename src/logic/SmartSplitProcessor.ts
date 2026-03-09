@@ -5,11 +5,12 @@ pdfjsLib.GlobalWorkerOptions.workerSrc = `${import.meta.env.BASE_URL}pdf.worker.
 
 export interface SmartSplitConfig {
     empresa: string;
-    subId: string;
+    projeto: string;
     equipe: string;
     tipoDoc: string;
     rotuloNome: string;
     rotuloPeriodo: string;
+    rotuloDepto: string;
 }
 
 export interface SmartSplitResult {
@@ -17,6 +18,7 @@ export interface SmartSplitResult {
     pagina: number;
     nomeColaborador: string;
     periodo: string;
+    depto: string;
     encontrado: boolean;
 }
 
@@ -24,11 +26,12 @@ export const CONFIG_KEY = 'smartSplitConfig';
 
 export const defaultConfig: SmartSplitConfig = {
     empresa: 'AEDAS',
-    subId: 'MRD_ITU_RESP',
+    projeto: 'MRD',
     equipe: 'ADM',
     tipoDoc: 'DEMONSTRATIVOS',
     rotuloNome: 'Func.:',
     rotuloPeriodo: 'Período:',
+    rotuloDepto: 'Depto.:',
 };
 
 export function loadConfig(): SmartSplitConfig {
@@ -61,18 +64,17 @@ async function extractPagesText(pdfBytes: Uint8Array): Promise<string[]> {
 }
 
 /**
- * Extrai o nome do colaborador do texto extraído pela página.
- * Tenta casar: <rótulo> <código opcional>  - <nome>
- * Exemplo: "Func.: 052191 - FULANO DOS SANTOS"
+ * Extrai campo com padrão: <rótulo> <código numérico opcional> - <valor>
+ * Exemplo: "Func.: 052191 - FULANO DOS SANTOS" → "FULANO DOS SANTOS"
+ * Exemplo: "Depto.: 000025 - PROJETO ITUETA E RESPLENDOR" → "PROJETO ITUETA E RESPLENDOR"
  */
-function extrairNome(texto: string, rotulo: string): string {
-    // Escapa caracteres especiais do rótulo para usar em regex
+function extrairCampoComCodigo(texto: string, rotulo: string): string {
     const rotuloEsc = rotulo.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-    // Tenta padrão com código numérico: Func.: 052191 - NOME
+    // Tenta padrão com código numérico: RÓTULO 000000 - VALOR
     let regex = new RegExp(rotuloEsc + '\\s*[\\d]+\\s*-\\s*([A-ZÀ-Ú][A-ZÀ-Ú\\s]+)', 'i');
     let match = texto.match(regex);
     if (match) return match[1].trim();
-    // Tenta padrão sem código: Nome: FULANO DOS SANTOS
+    // Tenta padrão sem código
     regex = new RegExp(rotuloEsc + '\\s*([A-ZÀ-Ú][A-ZÀ-Ú\\s]+)', 'i');
     match = texto.match(regex);
     if (match) return match[1].trim();
@@ -96,10 +98,10 @@ function extrairPeriodo(texto: string, rotulo: string): string {
 }
 
 /**
- * Normaliza o nome para usar no arquivo: remove acentos, espaços viram _
+ * Normaliza string para usar no nome do arquivo: remove acentos, espaços → _
  */
-function normalizarNome(nome: string): string {
-    return nome
+function normalizar(texto: string): string {
+    return texto
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
         .replace(/\s+/g, '_')
@@ -108,7 +110,7 @@ function normalizarNome(nome: string): string {
 }
 
 /**
- * Processa o PDF no modo inteligente: gera preview com os nomes antes do download.
+ * Gera preview dos nomes que serão gerados antes do download.
  */
 export async function previewSmartSplit(
     pdfBytes: Uint8Array,
@@ -116,16 +118,20 @@ export async function previewSmartSplit(
 ): Promise<SmartSplitResult[]> {
     const pagesText = await extractPagesText(pdfBytes);
     return pagesText.map((texto, idx) => {
-        const nomeRaw = extrairNome(texto, config.rotuloNome);
+        const nomeRaw = extrairCampoComCodigo(texto, config.rotuloNome);
         const periodoRaw = extrairPeriodo(texto, config.rotuloPeriodo);
-        const nome = nomeRaw ? normalizarNome(nomeRaw) : '';
+        const deptoRaw = extrairCampoComCodigo(texto, config.rotuloDepto);
+
+        const nome = nomeRaw ? normalizar(nomeRaw) : '';
         const periodo = periodoRaw || '';
+        const depto = deptoRaw ? normalizar(deptoRaw) : '';
         const encontrado = !!(nome && periodo);
 
         const prefixos = [
             periodo || 'SEM_PERIODO',
             config.empresa,
-            config.subId,
+            config.projeto,
+            depto || 'SEM_DEPTO',
             config.equipe,
             config.tipoDoc,
             nome || `PAGINA_${idx + 1}`,
@@ -136,6 +142,7 @@ export async function previewSmartSplit(
             pagina: idx + 1,
             nomeColaborador: nomeRaw || '',
             periodo: periodoRaw || '',
+            depto: deptoRaw || '',
             encontrado,
         };
     });

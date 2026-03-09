@@ -442,7 +442,8 @@ const App: React.FC = () => {
                         Nome gerado: <span className="filename-preview">
                           {[
                             smartConfig.empresa,
-                            smartConfig.subId,
+                            smartConfig.projeto,
+                            'DEPTO_DO_DOCUMENTO',
                             smartConfig.equipe,
                             smartConfig.tipoDoc,
                             'NOME_COLABORADOR',
@@ -458,8 +459,8 @@ const App: React.FC = () => {
                           <div className="config-fields">
                             {([
                               { field: 'empresa', label: 'Empresa', placeholder: 'AEDAS' },
-                              { field: 'subId', label: 'Sub-ID / Obra', placeholder: 'MRD_ITU_RESP' },
-                              { field: 'equipe', label: 'Equipe / Depto', placeholder: 'ADM' },
+                              { field: 'projeto', label: 'Projeto', placeholder: 'MRD' },
+                              { field: 'equipe', label: 'Equipe', placeholder: 'ADM' },
                               { field: 'tipoDoc', label: 'Tipo de Documento', placeholder: 'DEMONSTRATIVOS' },
                             ] as { field: keyof SmartSplitConfig; label: string; placeholder: string }[]).map(({ field, label, placeholder }) => (
                               <label key={field} className="config-field">
@@ -501,6 +502,16 @@ const App: React.FC = () => {
                                 onChange={e => updateConfig('rotuloPeriodo', e.target.value)}
                               />
                             </label>
+                            <label className="config-field">
+                              <span className="config-label">Rótulo do departamento</span>
+                              <input
+                                type="text"
+                                className="config-input"
+                                value={smartConfig.rotuloDepto}
+                                placeholder="Depto.:"
+                                onChange={e => updateConfig('rotuloDepto', e.target.value)}
+                              />
+                            </label>
                             <button
                               className="reset-config-btn"
                               onClick={() => { setSmartConfig({ ...defaultConfig }); setSmartPreview(null); }}
@@ -536,6 +547,7 @@ const App: React.FC = () => {
                                 <th>Pág.</th>
                                 <th>Colaborador</th>
                                 <th>Período</th>
+                                <th>Depto</th>
                                 <th>Nome do arquivo</th>
                               </tr>
                             </thead>
@@ -545,6 +557,7 @@ const App: React.FC = () => {
                                   <td>{row.pagina}</td>
                                   <td>{row.nomeColaborador || <span className="not-found">Não encontrado</span>}</td>
                                   <td>{row.periodo || <span className="not-found">—</span>}</td>
+                                  <td>{row.depto || <span className="not-found">—</span>}</td>
                                   <td className="filename-cell">{row.nomeArquivo}</td>
                                 </tr>
                               ))}
