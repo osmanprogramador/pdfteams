@@ -1,0 +1,43 @@
+{
+    "$schema": "https://developer.microsoft.com/en-us/json-schemas/teams/v1.16/MicrosoftTeams.schema.json",
+    "manifestVersion": "1.16",
+    "version": "1.0.0",
+    "id": "a8c2f3d4-e5f6-4a7b-8c9d-0e1f2a3b4c5d",
+    "packageName": "com.pdfseparador.teams",
+    "developer": {
+        "name": "Osman Programador",
+        "websiteUrl": "https://osmanprogramador.github.io/pdfteams",
+        "privacyUrl": "https://osmanprogramador.github.io/pdfteams",
+        "termsOfUseUrl": "https://osmanprogramador.github.io/pdfteams"
+    },
+    "icons": {
+        "color": "color.png",
+        "outline": "outline.png"
+    },
+    "name": {
+        "short": "Separador de PDF",
+        "full": "Separador de PDF para Microsoft Teams"
+    },
+    "description": {
+        "short": "Divida PDFs facilmente no Teams.",
+        "full": "Divida arquivos PDF em múltiplos documentos diretamente no Microsoft Teams. Processamento 100% local — seus arquivos nunca saem do dispositivo."
+    },
+    "accentColor": "#6264A7",
+    "staticTabs": [
+        {
+            "entityId": "pdfseparador",
+            "name": "Separador de PDF",
+            "contentUrl": "https://osmanprogramador.github.io/pdfteams/",
+            "websiteUrl": "https://osmanprogramador.github.io/pdfteams/",
+            "scopes": [
+                "personal"
+            ]
+        }
+    ],
+    "permissions": [
+        "identity"
+    ],
+    "validDomains": [
+        "osmanprogramador.github.io"
+    ]
+}
