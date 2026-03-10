@@ -360,13 +360,13 @@ const App: React.FC = () => {
                     className={`mode-btn ${appMode === 'manual' ? 'active' : ''}`}
                     onClick={() => setAppMode('manual')}
                   >
-                    ✂️ Manual
+                    Manual
                   </button>
                   <button
                     className={`mode-btn ${appMode === 'smart' ? 'active' : ''}`}
                     onClick={() => setAppMode('smart')}
                   >
-                    ⚡ Inteligente
+                    Inteligente
                   </button>
                 </div>
 
@@ -380,7 +380,7 @@ const App: React.FC = () => {
                       </div>
                       <div className="ranges-header-actions">
                         <button className="split-all-btn" onClick={splitAllPages} title={`Criar ${pageCount} intervalos, um por página`}>
-                          ⚡ Página por página
+                          Página por página
                         </button>
                         <button className="add-btn" onClick={addRange}>
                           + Adicionar intervalo
@@ -677,7 +677,7 @@ const App: React.FC = () => {
               Separador de PDF · Processamento local · Seus arquivos nunca saem do dispositivo
             </Text>
             <Text size={100} className="muted" block>
-              Desenvolvido pela GEI. Todos os direitos reservados.
+              Desenvolvido pela GEI MRD. Todos os direitos reservados.
             </Text>
           </footer>
         </div>
