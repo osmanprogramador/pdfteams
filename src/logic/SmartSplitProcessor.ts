@@ -36,7 +36,7 @@ export const defaultConfig: SmartSplitConfig = {
     rotuloDepto: 'Depto.:',
     mapeamentoDepto: {
         'PROJETO CONSELHEIRO PENA': 'CON_PEN',
-        'PROJETO AIMORES': 'AIM',
+        'PROJETO AIMORES': 'AIMORES',
         'PROJETO VALE DO ACO': 'VA',
         'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
     },
@@ -190,20 +190,32 @@ export function abreviarNome(nome: string): string {
 
 function abreviarDepto(depto: string, mapping: Record<string, string>): string {
     const d = depto.trim().toUpperCase();
-    // Procura se qualquer chave existe dentro do texto do departamento
-    for (const key in mapping) {
-        if (d.includes(key.toUpperCase())) return mapping[key];
+
+    // Sort keys by length descending to ensure the most specific match (longest string) wins
+    const sortedKeys = Object.keys(mapping).sort((a, b) => b.length - a.length);
+
+    for (const key of sortedKeys) {
+        if (d.includes(key.toUpperCase())) {
+            const result = mapping[key];
+            console.log(`[Depto Match] "${depto}" -> Key: "${key}" -> Result: "${result}"`);
+            return result;
+        }
     }
     return depto;
 }
 
-export function limparParaArquivo(str: string): string {
-    return str
+export function limparParaArquivo(str: string, sep: string = '_'): string {
+    const res = str
         .normalize('NFD')
         .replace(/[\u0300-\u036f]/g, '')
-        .replace(/[^A-Za-z0-9]/g, '_')
-        .replace(/_+/g, '_')
-        .toUpperCase();
+        .replace(/[^A-Za-z0-9]/g, sep);
+
+    if (sep) {
+        // Escapa o separador para uso no RegExp
+        const escapedSep = sep.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+        return res.replace(new RegExp(`${escapedSep}+`, 'g'), sep).toUpperCase();
+    }
+    return res.toUpperCase();
 }
 
 export async function previewSmartSplit(
@@ -227,7 +239,7 @@ export async function previewSmartSplit(
         const periodoRaw = extrairPeriodoRobusto(rawText);
 
         const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
-        const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
+        const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev, '') : '';
 
         const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw, config.mapeamentoDepto) : '';
         const deptoFinal = deptoAbrev ? limparParaArquivo(deptoAbrev) : '';

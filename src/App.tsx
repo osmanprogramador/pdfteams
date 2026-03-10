@@ -572,6 +572,8 @@ const App: React.FC = () => {
                                   const newMap = { ...smartConfig.mapeamentoDepto };
                                   delete newMap[pdfText];
                                   setSmartConfig(prev => ({ ...prev, mapeamentoDepto: newMap }));
+                                  setSmartPreview(null);
+                                  setSelectedPages(new Set());
                                 }}
                                 title="Remover mapeamento"
                               >
@@ -604,6 +606,8 @@ const App: React.FC = () => {
                                   [pdfInput.value.toUpperCase()]: abrevInput.value.toUpperCase()
                                 };
                                 setSmartConfig(prev => ({ ...prev, mapeamentoDepto: newMap }));
+                                setSmartPreview(null);
+                                setSelectedPages(new Set());
                                 pdfInput.value = '';
                                 abrevInput.value = '';
                               }
