@@ -495,7 +495,7 @@ const App: React.FC = () => {
                               { field: 'projeto', label: 'Projeto', placeholder: 'MRD' },
                               { field: 'equipe', label: 'Equipe', placeholder: 'ADM' },
                               { field: 'tipoDoc', label: 'Tipo de Documento', placeholder: 'DEMONSTRATIVOS' },
-                            ] as { field: keyof SmartSplitConfig; label: string; placeholder: string }[]).map(({ field, label, placeholder }) => (
+                            ] as { field: Exclude<keyof SmartSplitConfig, 'mapeamentoDepto'>; label: string; placeholder: string }[]).map(({ field, label, placeholder }) => (
                               <label key={field} className="config-field">
                                 <span className="config-label">{label}</span>
                                 <input
@@ -552,6 +552,65 @@ const App: React.FC = () => {
                               ↺ Restaurar padrões
                             </button>
                           </div>
+                        </div>
+                      </div>
+
+                      {/* NOVO: Gerenciamento de Mapeamento de Departamentos */}
+                      <div className="config-section mapping-section">
+                        <Text size={300} weight="semibold" block className="config-section-title">
+                          Abreviações de Departamentos
+                        </Text>
+                        <div className="mapping-list">
+                          {Object.entries(smartConfig.mapeamentoDepto).map(([pdfText, abbreviation]) => (
+                            <div key={pdfText} className="mapping-item">
+                              <span className="mapping-text">
+                                <strong>{pdfText}</strong> → {abbreviation}
+                              </span>
+                              <button
+                                className="remove-mapping-btn"
+                                onClick={() => {
+                                  const newMap = { ...smartConfig.mapeamentoDepto };
+                                  delete newMap[pdfText];
+                                  setSmartConfig(prev => ({ ...prev, mapeamentoDepto: newMap }));
+                                }}
+                                title="Remover mapeamento"
+                              >
+                                ✕
+                              </button>
+                            </div>
+                          ))}
+                        </div>
+                        <div className="add-mapping-form">
+                          <input
+                            type="text"
+                            id="new-depto-pdf"
+                            placeholder="Texto lido no PDF (ex: PROJETO AIMORES)"
+                            className="config-input mapping-input"
+                          />
+                          <input
+                            type="text"
+                            id="new-depto-abrev"
+                            placeholder="Abreviação (ex: AIM)"
+                            className="config-input mapping-input abrev-input"
+                          />
+                          <button
+                            className="add-mapping-btn"
+                            onClick={() => {
+                              const pdfInput = document.getElementById('new-depto-pdf') as HTMLInputElement;
+                              const abrevInput = document.getElementById('new-depto-abrev') as HTMLInputElement;
+                              if (pdfInput.value && abrevInput.value) {
+                                const newMap = {
+                                  ...smartConfig.mapeamentoDepto,
+                                  [pdfInput.value.toUpperCase()]: abrevInput.value.toUpperCase()
+                                };
+                                setSmartConfig(prev => ({ ...prev, mapeamentoDepto: newMap }));
+                                pdfInput.value = '';
+                                abrevInput.value = '';
+                              }
+                            }}
+                          >
+                            + Adicionar
+                          </button>
                         </div>
                       </div>
 

@@ -11,6 +11,7 @@ export interface SmartSplitConfig {
     rotuloNome: string;
     rotuloPeriodo: string;
     rotuloDepto: string;
+    mapeamentoDepto: Record<string, string>;
 }
 
 export interface SmartSplitResult {
@@ -33,12 +34,12 @@ export const defaultConfig: SmartSplitConfig = {
     rotuloNome: 'Func.:',
     rotuloPeriodo: 'Período:',
     rotuloDepto: 'Depto.:',
-};
-
-// Mapeamento de abreviações de departamentos
-const DEPT_MAPPING: Record<string, string> = {
-    'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
-    'PROJETO CONSELHEIRO PENA': 'CONS_PENA',
+    mapeamentoDepto: {
+        'PROJETO CONSELHEIRO PENA': 'CON_PEN',
+        'PROJETO AIMORES': 'AIM',
+        'PROJETO VALE DO ACO': 'VA',
+        'PROJETO ITUETA E RESPLENDOR': 'ITU_RESP',
+    },
 };
 
 export function loadConfig(): SmartSplitConfig {
@@ -187,11 +188,11 @@ export function abreviarNome(nome: string): string {
     return `${partes[0]} ${partes[partes.length - 1]}`;
 }
 
-function abreviarDepto(depto: string): string {
+function abreviarDepto(depto: string, mapping: Record<string, string>): string {
     const d = depto.trim().toUpperCase();
     // Procura se qualquer chave existe dentro do texto do departamento
-    for (const key in DEPT_MAPPING) {
-        if (d.includes(key.toUpperCase())) return DEPT_MAPPING[key];
+    for (const key in mapping) {
+        if (d.includes(key.toUpperCase())) return mapping[key];
     }
     return depto;
 }
@@ -228,7 +229,7 @@ export async function previewSmartSplit(
         const nomeAbrev = nomeRaw ? abreviarNome(nomeRaw) : '';
         const nomeFinal = nomeAbrev ? limparParaArquivo(nomeAbrev) : '';
 
-        const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw) : '';
+        const deptoAbrev = deptoRaw ? abreviarDepto(deptoRaw, config.mapeamentoDepto) : '';
         const deptoFinal = deptoAbrev ? limparParaArquivo(deptoAbrev) : '';
 
         const encontrado = !!(nomeFinal && periodoRaw);

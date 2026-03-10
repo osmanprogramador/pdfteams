@@ -581,6 +581,105 @@ body {
 }
 
 /* ============================================================
+   MAPPING SECTION
+   ============================================================ */
+.mapping-section {
+  grid-column: span 2;
+  margin-top: 10px;
+  background: rgba(255, 255, 255, 0.02) !important;
+  border: 1px solid var(--border) !important;
+  border-radius: 12px;
+  padding: 16px !important;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+
+.mapping-list {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  margin-bottom: 4px;
+}
+
+.mapping-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  background: rgba(255, 255, 255, 0.04);
+  padding: 8px 12px;
+  border-radius: 6px;
+  border: 1px solid transparent;
+  transition: all 0.2s;
+}
+
+.mapping-item:hover {
+  background: rgba(255, 255, 255, 0.07);
+  border-color: var(--brand-glow);
+}
+
+.mapping-text {
+  font-size: 13px;
+  color: var(--text-primary);
+}
+
+.mapping-text strong {
+  color: var(--brand-hover);
+}
+
+.remove-mapping-btn {
+  background: transparent;
+  border: none;
+  color: var(--text-secondary);
+  cursor: pointer;
+  padding: 4px;
+  font-size: 12px;
+  border-radius: 4px;
+  transition: background 0.2s, color 0.2s;
+}
+
+.remove-mapping-btn:hover {
+  background: rgba(244, 124, 124, 0.15);
+  color: var(--error);
+}
+
+.add-mapping-form {
+  display: flex;
+  gap: 10px;
+  margin-top: 4px;
+}
+
+.mapping-input {
+  flex: 2;
+}
+
+.abrev-input {
+  flex: 1;
+  text-transform: uppercase;
+  font-weight: 600;
+  text-align: center;
+}
+
+.add-mapping-btn {
+  background: var(--brand-mid);
+  border: 1px solid var(--brand-hover);
+  color: var(--brand-hover);
+  border-radius: 8px;
+  padding: 0 16px;
+  font-size: 13px;
+  font-weight: 600;
+  cursor: pointer;
+  transition: all 0.2s;
+}
+
+.add-mapping-btn:hover {
+  background: var(--brand);
+  box-shadow: 0 0 10px var(--brand-glow);
+}
+
+/* ============================================================
    UTILS
    ============================================================ */
 .muted {
