@@ -474,13 +474,14 @@ const App: React.FC = () => {
                         </Text>
                         <span className="filename-preview">
                           {[
+                            '202602',
                             smartConfig.empresa,
                             smartConfig.projeto,
-                            'DEPTO_DOC',
+                            'DEPTO',
                             smartConfig.equipe,
                             smartConfig.tipoDoc,
-                            'NOME_COLAB',
-                          ].filter(Boolean).join('_')}.pdf
+                            'NOMECOLABORADOR',
+                          ].filter(Boolean).map(s => s.toUpperCase()).join('_')}.pdf
                         </span>
                       </div>
 
