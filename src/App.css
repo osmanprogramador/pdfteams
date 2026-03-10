@@ -356,7 +356,8 @@ body {
 
 .split-all-btn {
   background: rgba(61, 214, 140, 0.1);
-  border: 1px solid rgba(61, 214, 140, 0.3);
+  /*border: 1px solid rgba(61, 214, 140, 0.3);*/
+  border: 1px solid rgba(40, 165, 105, 0.3);
   border-radius: 8px;
   color: var(--success);
   font-size: 13px;
