@@ -13,11 +13,13 @@
     "@fluentui/react-components": "^9.73.2",
     "@fluentui/react-icons": "^2.0.320",
     "@microsoft/teams-js": "^2.49.0",
+    "docx": "^9.6.1",
     "lucide-react": "^0.577.0",
     "pdf-lib": "^1.17.1",
     "pdfjs-dist": "^5.5.207",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4"
+    "react-dom": "^19.2.4",
+    "xlsx": "^0.18.5"
   },
   "devDependencies": {
     "@types/node": "^25.3.5",

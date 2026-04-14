@@ -16,6 +16,7 @@ import {
   saveConfig,
   previewSmartSplit,
 } from './logic/SmartSplitProcessor';
+import PdfConverter from './PdfConverter';
 import './App.css';
 
 interface PageRange {
@@ -24,7 +25,7 @@ interface PageRange {
   id: string;
 }
 
-type AppMode = 'manual' | 'smart';
+type AppMode = 'manual' | 'smart' | 'converter';
 
 const App: React.FC = () => {
   const [file, setFile] = useState<File | null>(null);
@@ -259,12 +260,29 @@ const App: React.FC = () => {
           </div>
           <nav className="sidebar-nav">
             <Tooltip content="Separador de PDF" relationship="label" positioning="after">
-              <button className="nav-item active">
+              <button
+                className={`nav-item ${appMode !== 'converter' ? 'active' : ''}`}
+                onClick={() => { setAppMode('manual'); resetApp(); }}
+              >
                 <svg width="20" height="20" viewBox="0 0 24 24" fill="currentColor">
                   <path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6z" />
                   <path d="M14 2v6h6" fill="none" stroke="currentColor" strokeWidth="1.5" />
                   <line x1="8" y1="13" x2="16" y2="13" stroke="white" strokeWidth="1.5" />
                   <line x1="8" y1="17" x2="13" y2="17" stroke="white" strokeWidth="1.5" />
+                </svg>
+              </button>
+            </Tooltip>
+            <Tooltip content="Conversor PDF → Word / Excel" relationship="label" positioning="after">
+              <button
+                className={`nav-item ${appMode === 'converter' ? 'active' : ''}`}
+                onClick={() => setAppMode('converter')}
+              >
+                {/* Convert arrows icon */}
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="1.8" strokeLinecap="round" strokeLinejoin="round">
+                  <path d="M8 3H5a2 2 0 0 0-2 2v14a2 2 0 0 0 2 2h3" />
+                  <path d="M16 3h3a2 2 0 0 1 2 2v14a2 2 0 0 1-2 2h-3" />
+                  <path d="M12 8l4 4-4 4" />
+                  <path d="M12 12H4" />
                 </svg>
               </button>
             </Tooltip>
@@ -281,7 +299,9 @@ const App: React.FC = () => {
                 alt="Logo"
                 className="header-logo"
               />
-              <h1 className="header-title">Separador de PDF</h1>
+              <h1 className="header-title">
+                {appMode === 'converter' ? 'Conversor PDF' : 'Separador de PDF'}
+              </h1>
             </div>
             {file && (
               <div className="header-right">
@@ -296,8 +316,10 @@ const App: React.FC = () => {
           </header>
 
           <main className="app-main">
-            {/* Upload Zone */}
-            {!file ? (
+            {/* Converter section */}
+            {appMode === 'converter' && <PdfConverter />}
+            {/* Upload Zone (only when not in converter) */}
+            {appMode !== 'converter' && !file ? (
               <div
                 className={`drop-zone ${isDragging ? 'dragging' : ''}`}
                 onDrop={handleDrop}
@@ -337,7 +359,7 @@ const App: React.FC = () => {
                   </div>
                 )}
               </div>
-            ) : (
+            ) : appMode !== 'converter' ? (
               <div className="workspace">
                 {/* File info strip */}
                 <div className="file-strip">
@@ -347,9 +369,9 @@ const App: React.FC = () => {
                     </svg>
                   </div>
                   <div className="file-info">
-                    <Text weight="semibold" size={400}>{file.name}</Text>
+                    <Text weight="semibold" size={400}>{file?.name}</Text>
                     <Text size={200} className="muted">
-                      {(file.size / 1024).toFixed(1)} KB · {pageCount} páginas
+                      {((file?.size ?? 0) / 1024).toFixed(1)} KB · {pageCount} páginas
                     </Text>
                   </div>
                 </div>
@@ -718,20 +740,24 @@ const App: React.FC = () => {
                   </div>
                 )}
               </div>
-            )}
+            ) : null}
 
-            {/* Toast messages */}
-            {error && (
-              <div className="toast toast-error">
-                <span>⚠ {error}</span>
-                <button onClick={() => setError(null)}>✕</button>
-              </div>
-            )}
-            {success && (
-              <div className="toast toast-success">
-                <span>✓ {success}</span>
-                <button onClick={() => setSuccess(null)}>✕</button>
-              </div>
+            {/* Toast messages (only for split modes) */}
+            {appMode !== 'converter' && (
+              <>
+                {error && (
+                  <div className="toast toast-error">
+                    <span>⚠ {error}</span>
+                    <button onClick={() => setError(null)}>✕</button>
+                  </div>
+                )}
+                {success && (
+                  <div className="toast toast-success">
+                    <span>✓ {success}</span>
+                    <button onClick={() => setSuccess(null)}>✕</button>
+                  </div>
+                )}
+              </>
             )}
           </main>
 
