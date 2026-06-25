@@ -1,4 +1,5 @@
 import React, { useState, useCallback, useRef, useEffect } from 'react';
+import JSZip from 'jszip';
 import {
   FluentProvider,
   webDarkTheme,
@@ -41,7 +42,13 @@ const App: React.FC = () => {
   const [smartPreview, setSmartPreview] = useState<SmartSplitResult[] | null>(null);
   const [selectedPages, setSelectedPages] = useState<Set<number>>(new Set());
   const [loadingPreview, setLoadingPreview] = useState(false);
+  const [splitProgress, setSplitProgress] = useState<{ current: number; total: number } | null>(null);
+  const [showHelp, setShowHelp] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const batchInputRef = useRef<HTMLInputElement>(null);
+  const [batchFiles, setBatchFiles] = useState<File[]>([]);
+  const [batchProcessing, setBatchProcessing] = useState(false);
+  const [batchProgress, setBatchProgress] = useState<{ file: string; current: number; total: number } | null>(null);
 
   useEffect(() => {
     saveConfig(smartConfig);
@@ -123,27 +130,35 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setError(null);
     setSuccess(null);
+    setSplitProgress(null);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdfBytes = new Uint8Array(arrayBuffer);
       const results = await splitPdf(pdfBytes, ranges);
-      results.forEach((bytes, index) => {
-        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        const range = ranges[index];
-        a.href = url;
-        a.download = `${file.name.replace('.pdf', '')}_p${range.start}-${range.end}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      });
-      setSuccess(`${results.length} arquivo(s) gerado(s) com sucesso! Verifique seus downloads.`);
+
+      if (results.length === 1) {
+        // Single file: download directly
+        const blob = new Blob([results[0].buffer as ArrayBuffer], { type: 'application/pdf' });
+        const range = ranges[0];
+        await triggerSaveAs(blob, `${file.name.replace('.pdf', '')}_p${range.start}-${range.end}.pdf`);
+      } else {
+        // Multiple files: bundle into ZIP
+        const zip = new JSZip();
+        results.forEach((bytes, index) => {
+          const range = ranges[index];
+          const name = `${file.name.replace('.pdf', '')}_p${range.start}-${range.end}.pdf`;
+          zip.file(name, bytes);
+          setSplitProgress({ current: index + 1, total: results.length });
+        });
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        await triggerSaveAs(zipBlob, `${file.name.replace('.pdf', '')}_separado.zip`);
+      }
+      setSuccess(`${results.length} arquivo(s) gerado(s) com sucesso!`);
     } catch {
       setError('Ocorreu um erro ao processar o PDF. Tente novamente.');
     } finally {
       setIsProcessing(false);
+      setSplitProgress(null);
     }
   };
 
@@ -193,42 +208,145 @@ const App: React.FC = () => {
     setIsProcessing(true);
     setError(null);
     setSuccess(null);
+    setSplitProgress(null);
     try {
       const arrayBuffer = await file.arrayBuffer();
       const pdfBytes = new Uint8Array(arrayBuffer);
-
-      // Filter smartPreview based on selectedPages
       const activeResults = smartPreview.filter(p => selectedPages.has(p.pagina));
-
       const pageRanges: PageRange[] = activeResults.map((p) => ({
         start: p.pagina,
         end: p.pagina,
         id: (Date.now() + p.pagina).toString(),
       }));
-
       const results = await splitPdf(pdfBytes, pageRanges);
-      results.forEach((bytes, index) => {
-        const blob = new Blob([bytes.buffer as ArrayBuffer], { type: 'application/pdf' });
-        const url = URL.createObjectURL(blob);
-        const a = document.createElement('a');
-        a.href = url;
-        a.download = activeResults[index].nomeArquivo;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-        URL.revokeObjectURL(url);
-      });
-      setSuccess(`${results.length} arquivo(s) baixado(s) com nomes automáticos!`);
+
+      if (results.length === 1) {
+        const blob = new Blob([results[0].buffer as ArrayBuffer], { type: 'application/pdf' });
+        await triggerSaveAs(blob, activeResults[0].nomeArquivo);
+      } else {
+        const zip = new JSZip();
+        results.forEach((bytes, index) => {
+          zip.file(activeResults[index].nomeArquivo, bytes);
+          setSplitProgress({ current: index + 1, total: results.length });
+        });
+        const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+        await triggerSaveAs(zipBlob, `${file.name.replace('.pdf', '')}_separado.zip`);
+      }
+      setSuccess(`${results.length} arquivo(s) empacotado(s) no ZIP com sucesso!`);
     } catch {
       setError('Erro ao processar o PDF.');
     } finally {
       setIsProcessing(false);
+      setSplitProgress(null);
+    }
+  };
+
+  /* ──────── Save As helper (File System Access API with fallback) ──────── */
+  const triggerSaveAs = async (blob: Blob, suggestedName: string) => {
+    if ('showSaveFilePicker' in window) {
+      try {
+        const ext = suggestedName.split('.').pop()?.toLowerCase() ?? '';
+        const mimeMap: Record<string, string> = {
+          'zip': 'application/zip',
+          'pdf': 'application/pdf',
+        };
+        const handle = await (window as Window & { showSaveFilePicker: (opts: unknown) => Promise<FileSystemFileHandle> }).showSaveFilePicker({
+          suggestedName,
+          types: [{ description: ext.toUpperCase(), accept: { [mimeMap[ext] || 'application/octet-stream']: [`.${ext}`] as const } }],
+        });
+        const writable = await handle.createWritable();
+        await writable.write(blob);
+        await writable.close();
+        return;
+      } catch (e) {
+        if (e instanceof Error && e.name === 'AbortError') return;
+      }
+    }
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = suggestedName;
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 500);
+  };
+
+  /* ──────── Config export/import ──────── */
+  const handleExportConfig = () => {
+    const blob = new Blob([JSON.stringify(smartConfig, null, 2)], { type: 'application/json' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = 'config_separador.json';
+    document.body.appendChild(a);
+    a.click();
+    setTimeout(() => { document.body.removeChild(a); URL.revokeObjectURL(url); }, 300);
+  };
+
+  const handleImportConfig = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const f = e.target.files?.[0];
+    if (!f) return;
+    const reader = new FileReader();
+    reader.onload = (ev) => {
+      try {
+        const imported = JSON.parse(ev.target?.result as string);
+        setSmartConfig({ ...defaultConfig, ...imported });
+        setSmartPreview(null);
+        setSelectedPages(new Set());
+        setSuccess('Configuração importada com sucesso!');
+      } catch {
+        setError('Arquivo de configuração inválido.');
+      }
+    };
+    reader.readAsText(f);
+    e.target.value = '';
+  };
+
+  /* ──────── Batch processing ──────── */
+  const handleBatchFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const files = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf');
+    if (files.length === 0) {
+      setError('Selecione arquivos PDF válidos.');
+      return;
+    }
+    setBatchFiles(files);
+    setError(null);
+  };
+
+  const handleBatchProcess = async () => {
+    if (batchFiles.length === 0) return;
+    setBatchProcessing(true);
+    setError(null);
+    setSuccess(null);
+    const zip = new JSZip();
+    try {
+      for (let fi = 0; fi < batchFiles.length; fi++) {
+        const currentFile = batchFiles[fi];
+        setBatchProgress({ file: currentFile.name, current: fi + 1, total: batchFiles.length });
+        const arrayBuffer = await currentFile.arrayBuffer();
+        const pdfBytes = new Uint8Array(arrayBuffer);
+        const preview = await previewSmartSplit(pdfBytes, smartConfig);
+        const pageRanges: PageRange[] = preview.map((p) => ({ start: p.pagina, end: p.pagina, id: `${fi}-${p.pagina}` }));
+        const results = await splitPdf(pdfBytes, pageRanges);
+        results.forEach((bytes, index) => {
+          zip.file(preview[index].nomeArquivo, bytes);
+        });
+      }
+      const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
+      await triggerSaveAs(zipBlob, `lote_separado_${batchFiles.length}_pdfs.zip`);
+      setSuccess(`${batchFiles.length} PDF(s) processados em lote com sucesso!`);
+      setBatchFiles([]);
+    } catch {
+      setError('Erro ao processar lote de PDFs.');
+    } finally {
+      setBatchProcessing(false);
+      setBatchProgress(null);
     }
   };
 
   const updateConfig = (field: keyof SmartSplitConfig, value: string) => {
     setSmartConfig(prev => ({ ...prev, [field]: value }));
-    setSmartPreview(null); // invalidate preview when config changes
+    setSmartPreview(null);
     setSelectedPages(new Set());
   };
 
@@ -313,7 +431,63 @@ const App: React.FC = () => {
                 </button>
               </div>
             )}
+            <button className="help-btn" onClick={() => setShowHelp(!showHelp)} title="Como usar">
+              {showHelp ? '✕' : '?'}
+            </button>
           </header>
+
+          {/* Help / Tutorial Panel */}
+          {showHelp && (
+            <div className="help-overlay">
+              <div className="help-panel">
+                <div className="help-panel-header">
+                  <Text weight="semibold" size={500}>📖 Como usar o Separador de PDF</Text>
+                  <button className="help-close-btn" onClick={() => setShowHelp(false)}>✕</button>
+                </div>
+                <div className="help-content">
+                  <div className="help-section">
+                    <Text weight="semibold" size={400} block>Passo a passo — Modo Manual</Text>
+                    <ol className="help-steps">
+                      <li><strong>Selecione o PDF:</strong> Arraste ou clique na área de upload para selecionar seu arquivo.</li>
+                      <li><strong>Defina os intervalos:</strong> Escolha "Da página X até página Y" para cada parte.</li>
+                      <li><strong>Clique "Dividir e Baixar":</strong> O sistema vai gerar um arquivo ZIP com todas as partes.</li>
+                      <li><strong>Salve o ZIP:</strong> Escolha onde salvar no diálogo que aparecerá.</li>
+                    </ol>
+                  </div>
+                  <div className="help-section">
+                    <Text weight="semibold" size={400} block>Passo a passo — Modo Inteligente</Text>
+                    <ol className="help-steps">
+                      <li><strong>Selecione o PDF:</strong> Arraste ou clique para selecionar o contracheque/demonstrativo.</li>
+                      <li><strong>Mude para "Inteligente":</strong> Clique no botão de modo na parte superior.</li>
+                      <li><strong>Configure os rótulos:</strong> Ajuste Empresa, Projeto, Equipe, e os rótulos de busca (Func.:, Período:, Depto.:).</li>
+                      <li><strong>Clique "Analisar":</strong> O sistema lê cada página e extrai nome, período e departamento.</li>
+                      <li><strong>Revise a tabela:</strong> Confira os nomes gerados e desmarque páginas que não deseja.</li>
+                      <li><strong>Clique "Separar e Renomear":</strong> Todos os PDFs serão empacotados em um ZIP com nomes automáticos.</li>
+                    </ol>
+                  </div>
+                  <div className="help-section">
+                    <Text weight="semibold" size={400} block>Passo a passo — Processamento em Lote</Text>
+                    <ol className="help-steps">
+                      <li><strong>Mude para "Inteligente":</strong> O lote só funciona no modo inteligente.</li>
+                      <li><strong>Configure os rótulos:</strong> Ajuste a configuração antes de selecionar os arquivos.</li>
+                      <li><strong>Clique "Processar em Lote":</strong> Selecione múltiplos PDFs de uma vez.</li>
+                      <li><strong>Aguarde:</strong> O sistema processa cada PDF automaticamente e gera um único ZIP.</li>
+                    </ol>
+                  </div>
+                  <div className="help-section help-limits">
+                    <Text weight="semibold" size={400} block>⚠️ Limitações Conhecidas</Text>
+                    <ul className="help-limits-list">
+                      <li><strong>PDFs escaneados (imagem):</strong> O sistema extrai apenas texto digital. PDFs que são fotos/scans de documentos não contêm texto e não podem ser processados automaticamente.</li>
+                      <li><strong>PDFs protegidos por senha:</strong> Arquivos com senha de abertura não podem ser lidos pelo sistema.</li>
+                      <li><strong>Tamanho máximo recomendado:</strong> Até 50 MB. Acima disso, o navegador pode ficar lento ou travar por falta de memória RAM.</li>
+                      <li><strong>Processamento 100% local:</strong> Tudo roda no navegador — seus arquivos nunca são enviados para servidores externos. Isso significa que a velocidade depende do hardware do seu computador.</li>
+                      <li><strong>Nomes não encontrados:</strong> Se o rótulo configurado (ex: "Func.:") não existir no PDF, a página será nomeada como "PAGINA_X".</li>
+                    </ul>
+                  </div>
+                </div>
+              </div>
+            </div>
+          )}
 
           <main className="app-main">
             {/* Converter section */}
@@ -648,6 +822,50 @@ const App: React.FC = () => {
                       >
                         {loadingPreview ? '⏳ Analisando PDF...' : '🔍 Analisar e Pré-visualizar nomes'}
                       </button>
+
+                      {/* Config Export/Import */}
+                      <div className="config-actions-row">
+                        <button className="config-action-btn" onClick={handleExportConfig}>
+                          📤 Exportar Configuração
+                        </button>
+                        <label className="config-action-btn import-label">
+                          📥 Importar Configuração
+                          <input type="file" accept=".json" hidden onChange={handleImportConfig} />
+                        </label>
+                      </div>
+
+                      {/* Batch Processing */}
+                      <div className="batch-section">
+                        <Text size={300} weight="semibold" block className="config-section-title">
+                          Processamento em Lote
+                        </Text>
+                        <Text size={200} className="muted" block>
+                          Selecione múltiplos PDFs para processar todos de uma vez com a configuração acima.
+                        </Text>
+                        <div className="batch-controls">
+                          <input ref={batchInputRef} type="file" accept=".pdf" multiple hidden onChange={handleBatchFiles} />
+                          <button className="batch-select-btn" onClick={() => batchInputRef.current?.click()}>
+                            📁 Selecionar PDFs ({batchFiles.length > 0 ? `${batchFiles.length} selecionado(s)` : 'nenhum'})
+                          </button>
+                          <button
+                            className="batch-process-btn"
+                            onClick={handleBatchProcess}
+                            disabled={batchFiles.length === 0 || batchProcessing}
+                          >
+                            {batchProcessing ? '⏳ Processando...' : `⚡ Processar Lote (${batchFiles.length})`}
+                          </button>
+                        </div>
+                        {batchProgress && (
+                          <div className="batch-progress-info">
+                            <div className="progress-bar-track">
+                              <div className="progress-bar-fill" style={{ width: `${(batchProgress.current / batchProgress.total) * 100}%` }} />
+                            </div>
+                            <Text size={200} className="muted">
+                              Processando {batchProgress.current} de {batchProgress.total}: {batchProgress.file}
+                            </Text>
+                          </div>
+                        )}
+                      </div>
                     </div>
 
                     {/* Preview table */}
@@ -720,7 +938,7 @@ const App: React.FC = () => {
 
                         <div className="summary-bar">
                           <Text size={300} className="muted">
-                            {selectedPages.size} arquivo(s) serão gerados
+                            {selectedPages.size} arquivo(s) serão empacotados em ZIP
                           </Text>
                           <Button
                             appearance="primary"
@@ -735,6 +953,16 @@ const App: React.FC = () => {
                             )}
                           </Button>
                         </div>
+                        {splitProgress && (
+                          <div className="batch-progress-info">
+                            <div className="progress-bar-track">
+                              <div className="progress-bar-fill" style={{ width: `${(splitProgress.current / splitProgress.total) * 100}%` }} />
+                            </div>
+                            <Text size={200} className="muted">
+                              Empacotando {splitProgress.current} de {splitProgress.total} arquivos...
+                            </Text>
+                          </div>
+                        )}
                       </div>
                     )}
                   </div>
