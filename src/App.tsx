@@ -304,7 +304,7 @@ const App: React.FC = () => {
 
   /* ──────── Batch processing ──────── */
   const handleBatchFiles = (e: React.ChangeEvent<HTMLInputElement>) => {
-    const files = Array.from(e.target.files || []).filter(f => f.type === 'application/pdf');
+    const files = Array.from(e.target.files || []).filter(f => f.name.toLowerCase().endsWith('.pdf'));
     if (files.length === 0) {
       setError('Selecione arquivos PDF válidos.');
       return;
@@ -319,25 +319,43 @@ const App: React.FC = () => {
     setError(null);
     setSuccess(null);
     const zip = new JSZip();
+    const existingNames = new Set<string>();
+
     try {
       for (let fi = 0; fi < batchFiles.length; fi++) {
         const currentFile = batchFiles[fi];
         setBatchProgress({ file: currentFile.name, current: fi + 1, total: batchFiles.length });
-        const arrayBuffer = await currentFile.arrayBuffer();
-        const pdfBytes = new Uint8Array(arrayBuffer);
-        const preview = await previewSmartSplit(pdfBytes, smartConfig);
-        const pageRanges: PageRange[] = preview.map((p) => ({ start: p.pagina, end: p.pagina, id: `${fi}-${p.pagina}` }));
-        const results = await splitPdf(pdfBytes, pageRanges);
-        results.forEach((bytes, index) => {
-          zip.file(preview[index].nomeArquivo, bytes);
-        });
+        
+        try {
+          const arrayBuffer = await currentFile.arrayBuffer();
+          const pdfBytes = new Uint8Array(arrayBuffer);
+          const preview = await previewSmartSplit(pdfBytes, smartConfig);
+          const pageRanges: PageRange[] = preview.map((p) => ({ start: p.pagina, end: p.pagina, id: `${fi}-${p.pagina}` }));
+          const results = await splitPdf(pdfBytes, pageRanges);
+          
+          results.forEach((bytes, index) => {
+            let name = preview[index].nomeArquivo;
+            // Prevent overwriting files with the same name across different PDFs in the batch
+            let counter = 1;
+            const baseName = name.replace(/\.pdf$/i, '');
+            while (existingNames.has(name)) {
+              name = `${baseName}_(${counter}).pdf`;
+              counter++;
+            }
+            existingNames.add(name);
+            zip.file(name, bytes);
+          });
+        } catch (err: any) {
+          console.error(`Erro no arquivo ${currentFile.name}:`, err);
+          throw new Error(`Falha ao ler "${currentFile.name}". Verifique se tem senha ou está corrompido.`);
+        }
       }
       const zipBlob = await zip.generateAsync({ type: 'blob', compression: 'DEFLATE', compressionOptions: { level: 6 } });
       await triggerSaveAs(zipBlob, `lote_separado_${batchFiles.length}_pdfs.zip`);
       setSuccess(`${batchFiles.length} PDF(s) processados em lote com sucesso!`);
       setBatchFiles([]);
-    } catch {
-      setError('Erro ao processar lote de PDFs.');
+    } catch (err: any) {
+      setError(err.message || 'Erro inesperado ao processar lote de PDFs.');
     } finally {
       setBatchProcessing(false);
       setBatchProgress(null);
